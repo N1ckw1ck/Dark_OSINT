@@ -1,0 +1,1890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Khaeos — Dark Web Index</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  /* Reset & Base */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0d;
+    --bg2: #111111;
+    --bg3: #161616;
+    --bg4: #1c1c1c;
+    --border: #1f2f1f;
+    --border2: #263326;
+    --green: #00cc44;
+    --green-dim: #008833;
+    --green-bright:#33ff66;
+    --green-muted: #1a4d2e;
+    --amber: #ffaa00;
+    --red: #ff3333;
+    --red-dim: #cc2222;
+    --cyan: #00cccc;
+    --white: #cccccc;
+    --dim: #777777;
+    --dim2: #3a3a3a;
+    --font: 'Courier New', 'Lucida Console', monospace;
+    --font-size:  13px;
+    --radius: 2px;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--green);
+    font-family: var(--font);
+    font-size: var(--font-size);
+    line-height: 1.5;
+    overflow: hidden;
+  }
+
+  /* Layout */
+  #app {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    grid-template-columns: 260px 1fr;
+    grid-template-areas:
+      "header  header"
+      "sidebar main";
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Header */
+  #header {
+    grid-area: header;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border2);
+    padding: 6px 16px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  #header-brand {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--green-bright);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    text-shadow: 0 0 12px var(--green-dim);
+  }
+
+  #header-sub {
+    color: var(--dim);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+
+  #header-stats {
+    display: flex;
+    gap: 16px;
+    margin-left: auto;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .hstat {
+    font-size: 11px;
+    color: var(--dim);
+  }
+
+  .hstat span {
+    color: var(--green);
+    font-weight: bold;
+  }
+
+  .hstat.warn span { color: var(--amber); }
+  .hstat.danger span { color: var(--red); }
+
+  /* Sidebar */
+  #sidebar {
+    grid-area: sidebar;
+    background: var(--bg2);
+    border-right: 1px solid var(--border2);
+    overflow-y: auto;
+    padding: 12px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .sidebar-section {
+    padding: 0 0 8px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+
+  .sidebar-label {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 6px 14px 4px;
+  }
+
+  /* Search */
+  #search-wrap {
+    padding: 8px 12px;
+  }
+
+  #search-input {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--green-bright);
+    font-family: var(--font);
+    font-size: 12px;
+    padding: 5px 8px;
+    outline: none;
+    border-radius: var(--radius);
+  }
+
+  #search-input:focus {
+    border-color: var(--green-dim);
+    box-shadow: 0 0 6px rgba(0,180,60,0.15);
+  }
+
+  #search-input::placeholder { color: var(--dim); }
+
+  /* Filters */
+  .filter-row {
+    display: flex;
+    align-items: center;
+    padding: 3px 14px;
+    gap: 6px;
+    cursor: pointer;
+    border-radius: var(--radius);
+    transition: background 0.1s;
+  }
+
+  .filter-row:hover { background: var(--bg3); }
+  .filter-row.active { background: var(--green-muted); }
+
+  .filter-row label {
+    font-size: 12px;
+    color: var(--white);
+    cursor: pointer;
+    flex: 1;
+  }
+
+  .filter-row input[type=checkbox] {
+    accent-color: var(--green);
+    cursor: pointer;
+  }
+
+  .filter-count {
+    font-size: 10px;
+    color: var(--dim);
+    margin-left: auto;
+  }
+
+  /* Category buttons */
+  .cat-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 14px;
+    cursor: pointer;
+    font-family: var(--font);
+    font-size: 12px;
+    color: var(--white);
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    transition: background 0.1s;
+  }
+
+  .cat-btn:hover { background: var(--bg3); }
+  .cat-btn.active { background: var(--green-muted); color: var(--green-bright); }
+
+  .cat-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green-dim);
+    flex-shrink: 0;
+  }
+
+  .cat-btn.active .cat-dot { background: var(--green-bright); }
+
+  .cat-n {
+    margin-left: auto;
+    color: var(--dim);
+    font-size: 10px;
+  }
+
+  /* Risk selector */
+  .risk-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 14px;
+    cursor: pointer;
+    font-family: var(--font);
+    font-size: 12px;
+    color: var(--white);
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    transition: background 0.1s;
+  }
+
+  .risk-btn:hover { background: var(--bg3); }
+  .risk-btn.active { background: var(--bg4); }
+
+  .risk-pip { width: 8px; height: 8px; border-radius: 1px; flex-shrink: 0; }
+  .risk-pip.CRITICAL { background: #ff2222; }
+  .risk-pip.HIGH { background: #ff6600; }
+  .risk-pip.MEDIUM { background: #ffaa00; }
+  .risk-pip.LOW { background: #00cc44; }
+  .risk-pip.UNKNOWN { background: #555; }
+
+  /* Upload zone */
+  #upload-zone {
+    margin: 8px 12px;
+    border: 1px dashed var(--border2);
+    border-radius: var(--radius);
+    padding: 10px 8px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--dim);
+    font-size: 11px;
+    transition: all 0.15s;
+  }
+
+  #upload-zone:hover, #upload-zone.drag-over {
+    border-color: var(--green-dim);
+    color: var(--green);
+    background: var(--bg3);
+  }
+
+  #upload-zone .upload-icon {
+    font-size: 18px;
+    margin-bottom: 4px;
+    display: block;
+  }
+
+  #upload-input { display: none; }
+
+  #upload-status {
+    margin: 4px 12px 0;
+    font-size: 11px;
+    min-height: 14px;
+    color: var(--dim);
+  }
+
+  #upload-status.ok { color: var(--green); }
+  #upload-status.err { color: var(--red); }
+
+  /* Sort controls */
+  #sort-select {
+    width: calc(100% - 24px);
+    margin: 4px 12px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--green);
+    font-family: var(--font);
+    font-size: 11px;
+    padding: 4px 6px;
+    outline: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+
+  /* Main panel */
+  #main {
+    grid-area: main;
+    display: grid;
+    grid-template-rows: 1fr;
+    overflow: hidden;
+  }
+
+  /* Views */
+  .view { display: none; height: 100%; overflow: hidden; }
+  .view.active { display: flex; flex-direction: column; }
+
+  /* Site list view */
+  #view-list {
+    flex-direction: column;
+  }
+
+  #results-bar {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 5px 14px;
+    font-size: 11px;
+    color: var(--dim);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  #results-count { color: var(--green); }
+
+  #site-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 0;
+  }
+
+  /* Site card */
+  .site-card {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    gap: 8px;
+    align-items: start;
+  }
+
+  .site-card:hover { background: var(--bg3); }
+  .site-card.selected { background: var(--bg4); border-left: 2px solid var(--green); }
+
+  .site-risk-pip {
+    width: 10px;
+    height: 10px;
+    border-radius: 1px;
+    margin-top: 3px;
+    flex-shrink: 0;
+  }
+
+  .site-main { min-width: 0; }
+
+  .site-host {
+    color: var(--cyan);
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .site-title {
+    color: var(--white);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+  }
+
+  .site-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+    align-items: center;
+  }
+
+  .badge {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 2px;
+    white-space: nowrap;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+  }
+
+  .badge-risk-CRITICAL { background: #3a0000; color: #ff3333; border: 1px solid #550000; }
+  .badge-risk-HIGH { background: #2a1400; color: #ff6600; border: 1px solid #442200; }
+  .badge-risk-MEDIUM { background: #2a2000; color: #ffaa00; border: 1px solid #443300; }
+  .badge-risk-LOW { background: #001a00; color: #00cc44; border: 1px solid #002200; }
+  .badge-risk-UNKNOWN { background: #1a1a1a; color: #555; border: 1px solid #2a2a2a; }
+
+  .badge-cat { background: var(--bg4); color: var(--dim); border: 1px solid var(--border2); }
+  .badge-tag { background: #001a2a; color: var(--cyan); border: 1px solid #002244; }
+  .badge-warn { background: #1a0000; color: var(--red); border: 1px solid #330000; }
+  .badge-ok { background: #001a00; color: var(--green); border: 1px solid #003300; }
+  .badge-dim { background: var(--bg4); color: var(--dim); border: 1px solid var(--border); }
+
+  .site-right {
+    text-align: right;
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--dim);
+    line-height: 1.7;
+  }
+
+  .uptime-good { color: var(--green); }
+  .uptime-mid { color: var(--amber); }
+  .uptime-bad { color: var(--red); }
+
+  /* Pagination */
+  #pagination {
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    font-size: 11px;
+  }
+
+  .pag-btn {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--green);
+    font-family: var(--font);
+    font-size: 11px;
+    padding: 3px 10px;
+    cursor: pointer;
+    border-radius: var(--radius);
+  }
+
+  .pag-btn:hover:not(:disabled) { background: var(--green-muted); }
+  .pag-btn:disabled { color: var(--dim); cursor: not-allowed; }
+
+  #pag-info { color: var(--dim); }
+
+  /* Detail / chart view */
+  #view-detail {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  #view-detail.active { display: flex; }
+
+  #detail-back {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border2);
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  #back-btn {
+    background: none;
+    border: 1px solid var(--border2);
+    color: var(--green-dim);
+    font-family: var(--font);
+    font-size: 11px;
+    padding: 3px 10px;
+    cursor: pointer;
+    border-radius: var(--radius);
+  }
+
+  #back-btn:hover { border-color: var(--green); color: var(--green); }
+
+  #detail-host {
+    color: var(--cyan);
+    font-size: 14px;
+    font-weight: bold;
+  }
+
+  #detail-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 12px;
+    align-content: start;
+  }
+
+  /* Stats grid */
+  #detail-stats-grid {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 8px;
+  }
+
+  .stat-box {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+  }
+
+  .stat-box-label {
+    font-size: 10px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  .stat-box-value {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--green-bright);
+    line-height: 1;
+  }
+
+  .stat-box-value.warn { color: var(--amber); }
+  .stat-box-value.danger { color: var(--red); }
+  .stat-box-value.dim { color: var(--dim); }
+  .stat-box-sub { font-size: 10px; color: var(--dim); margin-top: 3px; }
+
+  /* Chart panels */
+  .chart-panel {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+  }
+
+  .chart-panel-title {
+    font-size: 10px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  .chart-wrap { position: relative; height: 160px; }
+
+  /* Security posture panel */
+  #detail-posture {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+  }
+
+  .posture-title {
+    font-size: 10px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  .posture-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 0;
+    font-size: 11px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .posture-row:last-child { border-bottom: none; }
+
+  .posture-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .pi-good { background: var(--green); }
+  .pi-warn { background: var(--amber); }
+  .pi-bad { background: var(--red); }
+  .pi-neutral { background: var(--dim); }
+
+  .posture-label { flex: 1; color: var(--white); }
+  .posture-val { color: var(--dim); font-size: 10px; }
+
+  /* Risk flags */
+  #detail-flags {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+  }
+
+  .flag-item {
+    font-size: 11px;
+    padding: 3px 0;
+    color: var(--amber);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+  }
+
+  .flag-item:last-child { border-bottom: none; }
+  .flag-item.critical { color: var(--red); }
+
+  /* Scan history table */
+  #detail-history {
+    grid-column: 1 / -1;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    overflow-x: auto;
+  }
+
+  .scan-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  .scan-table th {
+    text-align: left;
+    color: var(--dim);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-bottom: 1px solid var(--border2);
+    font-weight: normal;
+  }
+
+  .scan-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--white);
+    white-space: nowrap;
+  }
+
+  .scan-table tr:last-child td { border-bottom: none; }
+  .scan-table tr:hover td { background: var(--bg4); }
+
+  /* Tags editor */
+  #detail-tags-row {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  #detail-tags-input {
+    flex: 1;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--green);
+    font-family: var(--font);
+    font-size: 12px;
+    padding: 5px 8px;
+    outline: none;
+    border-radius: var(--radius);
+  }
+
+  #detail-notes-input {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--white);
+    font-family: var(--font);
+    font-size: 12px;
+    padding: 5px 8px;
+    outline: none;
+    border-radius: var(--radius);
+    resize: vertical;
+    min-height: 48px;
+    grid-column: 1 / -1;
+  }
+
+  .save-btn {
+    background: var(--green-muted);
+    border: 1px solid var(--green-dim);
+    color: var(--green);
+    font-family: var(--font);
+    font-size: 11px;
+    padding: 4px 14px;
+    cursor: pointer;
+    border-radius: var(--radius);
+    white-space: nowrap;
+  }
+
+  .save-btn:hover { background: #1a5c2e; }
+
+  /* Overview / dashboard view */
+  #view-overview {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  #overview-body {
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .overview-panel {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+  }
+
+  .ov-title {
+    font-size: 10px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+
+  .ov-chart-wrap { position: relative; height: 180px; }
+
+  .ov-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+    font-size: 11px;
+  }
+
+  .ov-bar-label { width: 110px; color: var(--white); text-transform: capitalize; }
+  .ov-bar-track { flex: 1; background: var(--bg4); height: 10px; border-radius: 2px; overflow: hidden; }
+  .ov-bar-fill { height: 100%; background: var(--green-dim); border-radius: 2px; transition: width 0.4s; }
+  .ov-bar-n { width: 30px; text-align: right; color: var(--dim); }
+
+  /* Nav tabs */
+  #nav-tabs {
+    display: flex;
+    gap: 0;
+    margin-left: auto;
+  }
+
+  .nav-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--dim);
+    font-family: var(--font);
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 2px 12px;
+    cursor: pointer;
+    text-transform: uppercase;
+  }
+
+  .nav-tab:hover { color: var(--green); }
+  .nav-tab.active { color: var(--green-bright); border-bottom-color: var(--green); }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--green-dim); }
+
+  /* Loading */
+  #loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 1000;
+    font-size: 13px;
+    color: var(--green-dim);
+  }
+
+  #loading-overlay.hidden { display: none; }
+
+  .spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--green);
+    font-size: 12px;
+    padding: 8px 14px;
+    border-radius: var(--radius);
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    z-index: 2000;
+    max-width: 320px;
+  }
+
+  #toast.show { opacity: 1; }
+  #toast.err { color: var(--red); border-color: var(--red-dim); }
+
+  /* Empty state */
+  .empty-state {
+    padding: 40px;
+    text-align: center;
+    color: var(--dim);
+    font-size: 12px;
+    line-height: 2;
+  }
+
+  .empty-state strong { color: var(--green-dim); display: block; font-size: 14px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div>Khaeos emerges...</div>
+</div>
+
+<div id="toast"></div>
+
+<div id="app">
+
+  <!-- Header -->
+  <header id="header">
+    <div>
+      <div id="header-brand">✵ KHAEOS</div>
+
+      <div id="header-sub">Χαεος · bl̻̘͈̪ͪ̓į̴̮̱n̳̞d̞̙̱̰̅͂ k̡͡haeo͋̉͟͞ś̘̙ͥ̕͢ ͕͍̩̠͐͑iş̷ ͯ͐bṵ̢̠ͨͦ͡rsṯ̨̖͠ ope̶͉͍͝n</div>
+
+    </div>
+
+    <div id="nav-tabs">
+      <button class="nav-tab active" onclick="switchView('list')">Index</button>
+      <button class="nav-tab" onclick="switchView('overview')">Overview</button>
+    </div>
+
+    <div id="header-stats">
+      <div class="hstat">Sites: <span id="hs-sites">—</span></div>
+      <div class="hstat">Scans: <span id="hs-scans">—</span></div>
+      <div class="hstat warn">Blacklisted: <span id="hs-bl">—</span></div>
+      <div class="hstat danger">High/Critical: <span id="hs-hr">—</span></div>
+      <div class="hstat">Canary OK: <span id="hs-can">—</span></div>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <nav id="sidebar">
+
+    <!-- Search -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Search</div>
+      <div id="search-wrap">
+        <input type="text" id="search-input" placeholder="host, title, tags..." autocomplete="off">
+      </div>
+    </div>
+
+    <!-- Upload -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Ingest</div>
+      <div id="upload-zone" onclick="document.getElementById('upload-input').click()"
+           ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
+           ondrop="handleDrop(event)">
+        <span class="upload-icon">⬆</span>
+        Drop Mnemosyne JSON<br>or click to upload
+      </div>
+      <input type="file" id="upload-input" accept=".json" onchange="handleFileSelect(event)">
+      <div id="upload-status"></div>
+    </div>
+
+    <!-- Risk filter -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Risk Level</div>
+      <button class="risk-btn active" data-risk="" onclick="setRiskFilter('')">
+        <span class="risk-pip UNKNOWN"></span> All
+      </button>
+      <button class="risk-btn" data-risk="CRITICAL" onclick="setRiskFilter('CRITICAL')">
+        <span class="risk-pip CRITICAL"></span> Critical
+      </button>
+      <button class="risk-btn" data-risk="HIGH" onclick="setRiskFilter('HIGH')">
+        <span class="risk-pip HIGH"></span> High
+      </button>
+      <button class="risk-btn" data-risk="MEDIUM" onclick="setRiskFilter('MEDIUM')">
+        <span class="risk-pip MEDIUM"></span> Medium
+      </button>
+      <button class="risk-btn" data-risk="LOW" onclick="setRiskFilter('LOW')">
+        <span class="risk-pip LOW"></span> Low
+      </button>
+      <button class="risk-btn" data-risk="UNKNOWN" onclick="setRiskFilter('UNKNOWN')">
+        <span class="risk-pip UNKNOWN"></span> Unknown
+      </button>
+    </div>
+
+    <!-- Safety flags -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Safety Filters</div>
+      <div class="filter-row" onclick="toggleFilter('reachable')">
+        <input type="checkbox" id="f-reachable">
+        <label for="f-reachable">Reachable only</label>
+      </div>
+      <div class="filter-row" onclick="toggleFilter('no_blacklist')">
+        <input type="checkbox" id="f-no_blacklist">
+        <label for="f-no_blacklist">Exclude blacklisted</label>
+      </div>
+      <div class="filter-row" onclick="toggleFilter('no_clearnet')">
+        <input type="checkbox" id="f-no_clearnet">
+        <label for="f-no_clearnet">No clearnet leaks</label>
+      </div>
+      <div class="filter-row" onclick="toggleFilter('has_canary')">
+        <input type="checkbox" id="f-has_canary">
+        <label for="f-has_canary">Has canary</label>
+      </div>
+      <div class="filter-row" onclick="toggleFilter('canary_valid')">
+        <input type="checkbox" id="f-canary_valid">
+        <label for="f-canary_valid">Valid canary only</label>
+      </div>
+    </div>
+
+    <!-- Categories -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Category</div>
+      <button class="cat-btn active" data-cat="" onclick="setCategoryFilter('')">
+        <span class="cat-dot"></span> All
+        <span class="cat-n" id="cat-n-all"></span>
+      </button>
+      <div id="cat-list"></div>
+    </div>
+
+    <!-- Sort -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Sort by</div>
+      <select id="sort-select" onchange="setSortFilter(this.value)">
+        <option value="last_seen|desc">Last Seen ↓</option>
+        <option value="last_seen|asc">Last Seen ↑</option>
+        <option value="last_risk_score|desc">Risk Score ↓</option>
+        <option value="uptime_pct|desc">Uptime % ↓</option>
+        <option value="avg_latency_ms|asc">Latency ↑</option>
+        <option value="first_seen|asc">First Seen ↑</option>
+        <option value="page_title|asc">Title A-Z</option>
+      </select>
+    </div>
+
+  </nav>
+
+  <!-- Main -->
+  <main id="main">
+
+    <!-- Index view -->
+    <div id="view-list" class="view active">
+      <div id="results-bar">
+        <span>Results: <span id="results-count">—</span></span>
+      </div>
+      <div id="site-list"></div>
+      <div id="pagination">
+        <button class="pag-btn" id="pag-prev" onclick="prevPage()" disabled>◀ Prev</button>
+        <span id="pag-info"></span>
+        <button class="pag-btn" id="pag-next" onclick="nextPage()">Next ▶</button>
+      </div>
+    </div>
+
+    <!-- Detail view -->
+    <div id="view-detail" class="view">
+      <div id="detail-back">
+        <button id="back-btn" onclick="closeDetail()">◀ Back</button>
+        <span id="detail-host">—</span>
+        <span id="detail-title" style="color:var(--dim);font-size:11px;margin-left:8px;"></span>
+      </div>
+      <div id="detail-body">
+
+        <div id="detail-stats-grid"></div>
+
+        <div class="chart-panel">
+          <div class="chart-panel-title">Reachability &amp; Risk Score over Time</div>
+          <div class="chart-wrap"><canvas id="chart-reach"></canvas></div>
+        </div>
+
+        <div class="chart-panel">
+          <div class="chart-panel-title">Latency (ms) over Time</div>
+          <div class="chart-wrap"><canvas id="chart-lat"></canvas></div>
+        </div>
+
+        <div class="chart-panel">
+          <div class="chart-panel-title">Security Headers Count over Time</div>
+          <div class="chart-wrap"><canvas id="chart-hdrs"></canvas></div>
+        </div>
+
+        <div class="chart-panel">
+          <div class="chart-panel-title">Script Count over Time</div>
+          <div class="chart-wrap"><canvas id="chart-scripts"></canvas></div>
+        </div>
+
+        <div id="detail-posture">
+          <div class="posture-title">Security Posture</div>
+          <div id="posture-rows"></div>
+        </div>
+
+        <div id="detail-flags">
+          <div class="posture-title">Risk Flags (latest scan)</div>
+          <div id="flag-rows"></div>
+        </div>
+
+        <div id="detail-history" style="grid-column:1/-1;">
+          <div class="posture-title">Scan History</div>
+          <div style="overflow-x:auto;">
+            <table class="scan-table" id="scan-hist-table">
+              <thead>
+                <tr>
+                  <th>Scan Time</th>
+                  <th>Status</th>
+                  <th>Latency</th>
+                  <th>Risk</th>
+                  <th>Score</th>
+                  <th>Blacklisted</th>
+                  <th>Canary</th>
+                  <th>Clr Leaks</th>
+                  <th>Scripts</th>
+                  <th>Sec Headers</th>
+                </tr>
+              </thead>
+              <tbody id="scan-hist-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style="grid-column:1/-1; display:flex; gap:8px; align-items:center;">
+          <span style="color:var(--dim);font-size:11px;white-space:nowrap;">Tags:</span>
+          <input type="text" id="detail-tags-input" placeholder="comma,separated,tags">
+          <span style="color:var(--dim);font-size:11px;white-space:nowrap;">Category:</span>
+          <select id="detail-cat-select" style="background:var(--bg3);border:1px solid var(--border2);color:var(--green);font-family:var(--font);font-size:12px;padding:5px 8px;outline:none;border-radius:2px;cursor:pointer;"></select>
+          <button class="save-btn" onclick="saveMetadata()">Save</button>
+        </div>
+
+        <div style="grid-column:1/-1;">
+          <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Notes</div>
+          <textarea id="detail-notes-input" class="detail-notes-input" placeholder="Research notes..."></textarea>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Overview view -->
+    <div id="view-overview" class="view">
+      <div id="overview-body">
+
+        <div class="overview-panel">
+          <div class="ov-title">Risk Distribution</div>
+          <div class="ov-chart-wrap"><canvas id="ov-chart-risk"></canvas></div>
+        </div>
+
+        <div class="overview-panel">
+          <div class="ov-title">Sites by Category</div>
+          <div id="ov-cat-bars"></div>
+        </div>
+
+        <div class="overview-panel" style="grid-column:1/-1;">
+          <div class="ov-title">Batch Comparison — URLs / Reachable / Blacklisted</div>
+          <div class="ov-chart-wrap" style="height:200px;"><canvas id="ov-chart-batch-bars"></canvas></div>
+        </div>
+
+        <div class="overview-panel" style="grid-column:1/-1;">
+          <div class="ov-title">Batch Trends — Avg Risk Score &amp; Avg Security Headers</div>
+          <div class="ov-chart-wrap" style="height:200px;"><canvas id="ov-chart-batch-trend"></canvas></div>
+        </div>
+
+        <div class="overview-panel" style="grid-column:1/-1;">
+          <div class="ov-title">Index Summary</div>
+          <div id="ov-summary-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:6px;"></div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+</div>
+
+<script>
+// State
+const API = '';  // same origin
+
+let state = {
+  q: '',
+  category: '',
+  risk_level: '',
+  reachable: '',
+  blacklisted: '',
+  no_clearnet: '',
+  has_canary: '',
+  canary_valid: '',
+  sort: 'last_seen',
+  order: 'desc',
+  limit: 40,
+  offset: 0,
+  total: 0,
+};
+
+let currentHost = null;
+let chartInstances = {};
+let categories = [];
+let statsCache = null;
+
+// Init
+async function init() {
+  await loadCategories();
+  await loadStats();
+  await loadSites();
+  document.getElementById('loading-overlay').classList.add('hidden');
+
+  let debounce;
+  document.getElementById('search-input').addEventListener('input', e => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      state.q = e.target.value.trim();
+      state.offset = 0;
+      loadSites();
+    }, 300);
+  });
+}
+
+// API calls
+async function apiFetch(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function loadStats() {
+  try {
+    const d = await apiFetch('/api/stats');
+    statsCache = d;
+    document.getElementById('hs-sites').textContent = d.total_sites;
+    document.getElementById('hs-scans').textContent = d.total_scans;
+    document.getElementById('hs-bl').textContent = d.blacklisted;
+    document.getElementById('hs-hr').textContent = d.high_risk;
+    document.getElementById('hs-can').textContent = d.canary_valid;
+
+    // Category counts
+    const catN = {};
+    let total = 0;
+    for (const c of d.categories) { catN[c.category] = c.n; total += c.n; }
+    document.getElementById('cat-n-all').textContent = total;
+    for (const cat of categories) {
+      const el = document.getElementById('cat-n-' + cat);
+      if (el) el.textContent = catN[cat] || 0;
+    }
+  } catch(e) { console.error('stats error', e); }
+}
+
+async function loadCategories() {
+  try {
+    const d = await apiFetch('/api/categories');
+    categories = d.categories;
+    const list = document.getElementById('cat-list');
+    list.innerHTML = '';
+    for (const cat of categories) {
+      if (cat === 'uncategorized') continue;
+      const btn = document.createElement('button');
+      btn.className = 'cat-btn';
+      btn.dataset.cat = cat;
+      btn.onclick = () => setCategoryFilter(cat);
+      btn.innerHTML = `<span class="cat-dot"></span> ${cat}<span class="cat-n" id="cat-n-${cat}"></span>`;
+      list.appendChild(btn);
+    }
+    // uncategorized at end
+    const ub = document.createElement('button');
+    ub.className = 'cat-btn';
+    ub.dataset.cat = 'uncategorized';
+    ub.onclick = () => setCategoryFilter('uncategorized');
+    ub.innerHTML = `<span class="cat-dot"></span> uncategorized<span class="cat-n" id="cat-n-uncategorized"></span>`;
+    list.appendChild(ub);
+
+    // populate detail cat select
+    const sel = document.getElementById('detail-cat-select');
+    for (const cat of categories) {
+      const opt = document.createElement('option');
+      opt.value = cat; opt.textContent = cat;
+      sel.appendChild(opt);
+    }
+  } catch(e) { console.error('cats error', e); }
+}
+
+async function loadSites() {
+  const params = new URLSearchParams({
+    q: state.q,
+    category: state.category,
+    risk_level: state.risk_level,
+    reachable: state.reachable,
+    blacklisted: state.blacklisted,
+    no_clearnet: state.no_clearnet,
+    has_canary: state.has_canary,
+    canary_valid: state.canary_valid,
+    sort: state.sort,
+    order: state.order,
+    limit: state.limit,
+    offset: state.offset,
+  });
+
+  try {
+    const d = await apiFetch('/api/sites?' + params);
+    state.total = d.total;
+    renderSiteList(d.sites);
+    renderPagination();
+    document.getElementById('results-count').textContent = d.total;
+  } catch(e) {
+    toast('Failed to load sites: ' + e.message, true);
+  }
+}
+
+// Render site list
+function renderSiteList(sites) {
+  const el = document.getElementById('site-list');
+  if (!sites.length) {
+    el.innerHTML = `<div class="empty-state">
+      <strong>No results</strong>
+      Try adjusting your filters or ingesting a Mnemosyne JSON file.
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = '';
+  for (const s of sites) {
+    const card = document.createElement('div');
+    card.className = 'site-card';
+    card.dataset.host = s.host;
+
+    const risk  = s.last_risk_level || 'UNKNOWN';
+    const score = s.last_risk_score || 0;
+    const upPct = s.uptime_pct ?? null;
+
+    let uptimeColor = 'dim';
+    if (upPct !== null) {
+      if (upPct >= 70) uptimeColor = 'uptime-good';
+      else if (upPct >= 30) uptimeColor = 'uptime-mid';
+      else uptimeColor = 'uptime-bad';
+    }
+
+    const badges = [`<span class="badge badge-risk-${risk}">${risk} ${score > 0 ? score : ''}</span>`];
+    if (s.category && s.category !== 'uncategorized') badges.push(`<span class="badge badge-cat">${s.category}</span>`);
+    if (s.blacklisted) badges.push(`<span class="badge badge-warn">BLACKLISTED</span>`);
+    if (s.clearnet_redirect) badges.push(`<span class="badge badge-warn">CLEARNET REDIRECT</span>`);
+    if (s.clearnet_leak) badges.push(`<span class="badge badge-warn">RESOURCE LEAK</span>`);
+    if (s.canary_valid) badges.push(`<span class="badge badge-ok">✓ CANARY</span>`);
+    else if (s.has_canary) badges.push(`<span class="badge badge-dim">canary</span>`);
+
+    if (s.tags) {
+      for (const t of s.tags.split(',').map(x=>x.trim()).filter(Boolean)) {
+        badges.push(`<span class="badge badge-tag">${t}</span>`);
+      }
+    }
+
+    const lat = s.avg_latency_ms ? Math.round(s.avg_latency_ms) + 'ms' : '—';
+    const lastSeen = s.last_seen ? s.last_seen.slice(0,10) : '—';
+    const scansTotal = s.total_scans || 0;
+
+    card.innerHTML = `
+      <div class="site-risk-pip risk-pip ${risk}" style="width:10px;height:10px;border-radius:1px;margin-top:3px;flex-shrink:0;background:${riskColor(risk)};"></div>
+      <div class="site-main">
+        <div class="site-host">${esc(s.host)}</div>
+        <div class="site-title">${esc(s.page_title || '—')}</div>
+        <div class="site-meta">${badges.join('')}</div>
+      </div>
+      <div class="site-right">
+        <div class="${uptimeColor}">${upPct !== null ? upPct.toFixed(0) + '% up' : '—'}</div>
+        <div>${lat} avg</div>
+        <div>${scansTotal} scan${scansTotal !== 1 ? 's' : ''}</div>
+        <div>${lastSeen}</div>
+      </div>
+    `;
+
+    card.addEventListener('click', () => openDetail(s.host));
+    el.appendChild(card);
+  }
+}
+
+function riskColor(level) {
+  return { CRITICAL:'#ff2222', HIGH:'#ff6600', MEDIUM:'#ffaa00', LOW:'#00cc44', UNKNOWN:'#444' }[level] || '#444';
+}
+
+// Pagination
+function renderPagination() {
+  const page = Math.floor(state.offset / state.limit) + 1;
+  const pages = Math.max(1, Math.ceil(state.total / state.limit));
+  document.getElementById('pag-info').textContent = `Page ${page} / ${pages}`;
+  document.getElementById('pag-prev').disabled = state.offset === 0;
+  document.getElementById('pag-next').disabled = state.offset + state.limit >= state.total;
+}
+
+function prevPage() { state.offset = Math.max(0, state.offset - state.limit); loadSites(); scrollList(); }
+function nextPage() { state.offset += state.limit; loadSites(); scrollList(); }
+function scrollList() { document.getElementById('site-list').scrollTop = 0; }
+
+// Filters
+function setRiskFilter(r) {
+  state.risk_level = r; state.offset = 0;
+  document.querySelectorAll('.risk-btn').forEach(b => b.classList.toggle('active', b.dataset.risk === r));
+  loadSites();
+}
+
+function setCategoryFilter(c) {
+  state.category = c; state.offset = 0;
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === c));
+  loadSites();
+}
+
+function toggleFilter(name) {
+  const cb = document.getElementById('f-' + name);
+  cb.checked = !cb.checked;
+  const row = cb.closest('.filter-row');
+  row.classList.toggle('active', cb.checked);
+
+  if (name === 'reachable') state.reachable    = cb.checked ? '1' : '';
+  if (name === 'no_blacklist') state.blacklisted  = cb.checked ? '0' : '';
+  if (name === 'no_clearnet') state.no_clearnet  = cb.checked ? '1' : '';
+  if (name === 'has_canary') state.has_canary   = cb.checked ? '1' : '';
+  if (name === 'canary_valid') state.canary_valid = cb.checked ? '1' : '';
+
+  state.offset = 0;
+  loadSites();
+}
+
+function setSortFilter(val) {
+  const [s, o] = val.split('|');
+  state.sort = s; state.order = o; state.offset = 0;
+  loadSites();
+}
+
+// View switching 
+function switchView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    t.classList.toggle('active', t.textContent.toLowerCase().includes(name === 'list' ? 'index' : name));
+  });
+  if (name === 'detail') {
+    document.getElementById('view-detail').classList.add('active');
+  } else if (name === 'overview') {
+    document.getElementById('view-overview').classList.add('active');
+    renderOverview();
+  } else {
+    document.getElementById('view-list').classList.add('active');
+  }
+}
+
+// Detail view
+async function openDetail(host) {
+  currentHost = host;
+  document.querySelectorAll('.site-card').forEach(c => c.classList.toggle('selected', c.dataset.host === host));
+
+  switchView('detail');
+  document.getElementById('detail-host').textContent = host;
+  document.getElementById('detail-title').textContent = '';
+
+  // Destroy old charts
+  for (const k in chartInstances) { chartInstances[k].destroy(); }
+  chartInstances = {};
+
+  try {
+    const d = await apiFetch('/api/sites/' + encodeURIComponent(host));
+    const site = d.site;
+    const scans = d.scans;
+
+    document.getElementById('detail-title').textContent = site.page_title || '';
+    document.getElementById('detail-tags-input').value = site.tags || '';
+    document.getElementById('detail-notes-input').value = site.notes || '';
+    document.getElementById('detail-cat-select').value = site.category || 'uncategorized';
+
+    renderStatBoxes(site);
+    renderPosture(site, scans);
+    renderFlags(scans);
+    renderScanHistory(scans);
+
+    const ts = await apiFetch('/api/timeseries/' + encodeURIComponent(host));
+    renderCharts(ts);
+  } catch(e) {
+    toast('Error loading detail: ' + e.message, true);
+  }
+}
+
+function closeDetail() {
+  switchView('list');
+  currentHost = null;
+}
+
+function renderStatBoxes(s) {
+  const upPct = s.uptime_pct !== null ? s.uptime_pct.toFixed(1) + '%' : '—';
+  const upClass = s.uptime_pct >= 70 ? '' : s.uptime_pct >= 30 ? 'warn' : 'danger';
+  const lat = s.avg_latency_ms ? Math.round(s.avg_latency_ms) + ' ms' : '—';
+  const risk = s.last_risk_level || 'UNKNOWN';
+  const rClass = {CRITICAL:'danger', HIGH:'danger', MEDIUM:'warn', LOW:'', UNKNOWN:'dim'}[risk] || '';
+
+  const boxes = [
+    { label: 'Uptime', value: upPct, cls: upClass, sub: `${s.scans_reachable}/${s.total_scans} scans` },
+    { label: 'Avg Latency', value: lat, cls: '', sub: 'average over all scans' },
+    { label: 'Risk Level', value: risk, cls: rClass, sub: `score: ${s.last_risk_score}` },
+    { label: 'Total Scans', value: s.total_scans, cls: '', sub: `first: ${(s.first_seen||'').slice(0,10)}` },
+    { label: 'Blacklisted', value: s.blacklisted ? 'YES' : 'NO', cls: s.blacklisted ? 'danger' : '', sub: 'Ahmia blacklist' },
+    { label: 'Clearnet Leak', value: s.clearnet_leak ? 'YES' : 'NO', cls: s.clearnet_leak ? 'danger' : '', sub: 'resource or redirect' },
+    { label: 'PGP Canary', value: s.has_canary ? (s.canary_valid ? 'VALID' : 'FOUND') : 'NONE', cls: s.canary_valid ? '' : s.has_canary ? 'warn' : 'dim', sub: s.canary_valid ? 'signature verified' : '' },
+    { label: 'Sec Headers', value: s.security_headers_count, cls: s.security_headers_count >= 4 ? '' : s.security_headers_count >= 2 ? 'warn' : 'danger', sub: 'of 7 checked' },
+  ];
+
+  const grid = document.getElementById('detail-stats-grid');
+  grid.innerHTML = '';
+  for (const b of boxes) {
+    grid.innerHTML += `
+      <div class="stat-box">
+        <div class="stat-box-label">${b.label}</div>
+        <div class="stat-box-value ${b.cls}">${b.value}</div>
+        <div class="stat-box-sub">${b.sub || ''}</div>
+      </div>`;
+  }
+}
+
+function renderPosture(site, scans) {
+  // Use the most recent scan for detailed posture
+  const latest = scans.length ? scans[scans.length - 1] : null;
+  let secPresent = [], secMissing = [];
+  if (latest) {
+    try { secPresent = JSON.parse(latest.security_headers_present || '[]'); } catch(e) {}
+    try { secMissing = JSON.parse(latest.security_headers_missing || '[]'); } catch(e) {}
+  }
+
+  const rows = [
+    { label: 'Blacklisted (Ahmia)', good: !site.blacklisted, val: site.blacklisted ? 'YES — flagged for abuse' : 'No', flip: true },
+    { label: 'Clearnet Redirect', good: !site.clearnet_redirect, val: site.clearnet_redirect ? 'YES — deanon risk' : 'No', flip: true },
+    { label: 'Clearnet Resource Leak', good: !site.clearnet_leak, val: site.clearnet_leak ? 'YES — loading clearnet resources' : 'No', flip: true },
+    { label: 'PGP Canary', good: !!site.has_canary, val: site.has_canary ? (site.canary_valid ? 'Present & valid' : 'Present, not verified') : 'Not found' },
+    { label: 'Canary Signature Valid', good: !!site.canary_valid, val: site.canary_valid ? 'Verified' : 'Not verified' },
+    { label: 'Security Headers', good: site.security_headers_count >= 4, val: `${site.security_headers_count}/7 present` },
+  ];
+
+  if (secPresent.length) rows.push({ label: '  Present', good: true, val: secPresent.join(', ') });
+  if (secMissing.length) rows.push({ label: '  Missing', good: false, val: secMissing.join(', ') });
+
+  const container = document.getElementById('posture-rows');
+  container.innerHTML = '';
+  for (const row of rows) {
+    const cls = row.good ? 'pi-good' : (row.label.startsWith('  ') ? 'pi-neutral' : 'pi-bad');
+    container.innerHTML += `
+      <div class="posture-row">
+        <div class="posture-indicator ${cls}"></div>
+        <div class="posture-label">${row.label}</div>
+        <div class="posture-val">${esc(String(row.val))}</div>
+      </div>`;
+  }
+}
+
+function renderFlags(scans) {
+  const latest = scans.length ? scans[scans.length - 1] : null;
+  let flags = [];
+  if (latest) {
+    try { flags = JSON.parse(latest.risk_flags || '[]'); } catch(e) {}
+  }
+  const container = document.getElementById('flag-rows');
+  if (!flags.length) {
+    container.innerHTML = '<div style="color:var(--dim);font-size:11px;padding:4px 0;">No risk flags recorded.</div>';
+    return;
+  }
+  container.innerHTML = '';
+  for (const f of flags) {
+    const isCrit = /CRITICAL|clearnet|blacklist|INVALID/i.test(f);
+    container.innerHTML += `<div class="flag-item ${isCrit ? 'critical' : ''}">⚑ ${esc(f)}</div>`;
+  }
+}
+
+function renderScanHistory(scans) {
+  const tbody = document.getElementById('scan-hist-body');
+  tbody.innerHTML = '';
+  for (const s of [...scans].reverse()) {
+    const risk = s.risk_level || 'UNKNOWN';
+    const rc = riskColor(risk);
+    const lat = s.latency_ms ? Math.round(s.latency_ms) + 'ms' : '—';
+    const status = s.reachable ? `<span style="color:var(--green)">${s.status_code || 'OK'}</span>` : `<span style="color:var(--red)">OFFLINE</span>`;
+    let hdrCount = 0;
+    try { hdrCount = JSON.parse(s.security_headers_present || '[]').length; } catch(e) {}
+    tbody.innerHTML += `
+      <tr>
+        <td>${(s.scan_time||'').slice(0,16)}</td>
+        <td>${status}</td>
+        <td>${lat}</td>
+        <td style="color:${rc}">${risk}</td>
+        <td>${s.risk_score ?? '—'}</td>
+        <td>${s.blacklisted ? '<span style="color:var(--red)">YES</span>' : '<span style="color:var(--dim)">No</span>'}</td>
+        <td>${s.canary_valid ? '<span style="color:var(--green)">✓</span>' : s.has_canary ? '<span style="color:var(--amber)">?</span>' : '<span style="color:var(--dim)">—</span>'}</td>
+        <td>${s.clearnet_leaks > 0 ? `<span style="color:var(--red)">${s.clearnet_leaks}</span>` : '<span style="color:var(--dim)">0</span>'}</td>
+        <td>${s.script_count ?? '—'}</td>
+        <td>${hdrCount}/7</td>
+      </tr>`;
+  }
+}
+
+// Charts
+const CHART_DEFAULTS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: {
+      ticks: { color: '#555', font: { family: 'Courier New', size: 9 }, maxRotation: 0, maxTicksLimit: 6 },
+      grid: { color: '#1a1a1a' },
+    },
+    y: {
+      ticks: { color: '#555', font: { family: 'Courier New', size: 9 } },
+      grid: { color: '#1a1a1a' },
+    },
+  },
+};
+
+function makeChart(id, type, labels, datasets, extraOpts = {}) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  const cfg = JSON.parse(JSON.stringify(CHART_DEFAULTS));
+  Object.assign(cfg, extraOpts);
+  chartInstances[id] = new Chart(ctx, { type, data: { labels, datasets }, options: cfg });
+}
+
+function renderCharts(ts) {
+  const labels = ts.labels;
+
+  // Reach + Risk Score (dual axis)
+  makeChart('chart-reach', 'line', labels, [
+    {
+      label: 'Reachable',
+      data: ts.reachable,
+      borderColor: '#00cc44',
+      backgroundColor: 'rgba(0,180,60,0.08)',
+      fill: true,
+      tension: 0,
+      stepped: true,
+      yAxisID: 'yR',
+      pointRadius: 2,
+    },
+    {
+      label: 'Risk Score',
+      data: ts.risk_score,
+      borderColor: '#ff6600',
+      backgroundColor: 'transparent',
+      tension: 0.3,
+      yAxisID: 'yS',
+      pointRadius: 2,
+    },
+  ], {
+    scales: {
+      x: { ...CHART_DEFAULTS.scales.x },
+      yR: { ...CHART_DEFAULTS.scales.y, min: 0, max: 1, position: 'left',
+            ticks: { ...CHART_DEFAULTS.scales.y.ticks, callback: v => v === 1 ? 'Up' : 'Down' } },
+      yS: { ...CHART_DEFAULTS.scales.y, min: 0, max: 100, position: 'right', grid: { display: false } },
+    },
+    plugins: { legend: { display: true, labels: { color: '#555', font: { family: 'Courier New', size: 9 } } } },
+  });
+
+  // Latency
+  makeChart('chart-lat', 'line', labels, [{
+    data: ts.latency_ms,
+    borderColor: '#00cccc',
+    backgroundColor: 'rgba(0,180,180,0.06)',
+    fill: true,
+    tension: 0.3,
+    pointRadius: 2,
+    spanGaps: true,
+  }]);
+
+  // Security headers
+  makeChart('chart-hdrs', 'bar', labels, [{
+    data: ts.sec_header_count,
+    backgroundColor: ts.sec_header_count.map(v => v >= 4 ? '#008833' : v >= 2 ? '#996600' : '#660000'),
+    borderRadius: 1,
+  }], {
+    scales: {
+      x: { ...CHART_DEFAULTS.scales.x },
+      y: { ...CHART_DEFAULTS.scales.y, min: 0, max: 7 },
+    },
+  });
+
+  // Script count
+  makeChart('chart-scripts', 'line', labels, [{
+    data: ts.script_count,
+    borderColor: '#ffaa00',
+    backgroundColor: 'rgba(255,150,0,0.06)',
+    fill: true,
+    tension: 0.3,
+    pointRadius: 2,
+  }]);
+}
+
+// Metadata save
+async function saveMetadata() {
+  if (!currentHost) return;
+  const tags = document.getElementById('detail-tags-input').value.trim();
+  const notes = document.getElementById('detail-notes-input').value;
+  const category = document.getElementById('detail-cat-select').value;
+
+  try {
+    const r = await fetch(API + '/api/sites/' + encodeURIComponent(currentHost), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags, notes, category }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    toast('Saved.');
+    loadStats();
+  } catch(e) {
+    toast('Save failed: ' + e.message, true);
+  }
+}
+
+// Overview
+async function renderOverview() {
+  if (!statsCache) return;
+  const d = statsCache;
+
+  // Destroy existing overview charts
+  ['ov-risk-pie'].forEach(k => { if (chartInstances[k]) { chartInstances[k].destroy(); delete chartInstances[k]; } });
+
+  // Risk pie
+  const riskMap = {};
+  for (const r of d.risk_dist) riskMap[r.last_risk_level] = r.n;
+  const riskOrder = ['CRITICAL','HIGH','MEDIUM','LOW','UNKNOWN'];
+  const riskColors = { CRITICAL:'#ff2222', HIGH:'#ff6600', MEDIUM:'#ffaa00', LOW:'#00cc44', UNKNOWN:'#333' };
+
+  const ctx = document.getElementById('ov-chart-risk');
+  if (ctx) {
+    chartInstances['ov-risk-pie'] = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: riskOrder,
+        datasets: [{
+          data: riskOrder.map(r => riskMap[r] || 0),
+          backgroundColor: riskOrder.map(r => riskColors[r]),
+          borderColor: '#111',
+          borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'right',
+            labels: { color: '#888', font: { family: 'Courier New', size: 10 }, boxWidth: 10, padding: 8 },
+          },
+        },
+      },
+    });
+  }
+
+  // Category bars
+  const catMap = {};
+  let catMax = 1;
+  for (const c of d.categories) { catMap[c.category] = c.n; if (c.n > catMax) catMax = c.n; }
+  const bars = document.getElementById('ov-cat-bars');
+  bars.innerHTML = '';
+  const sortedCats = Object.entries(catMap).sort((a,b) => b[1]-a[1]).slice(0, 12);
+  for (const [cat, n] of sortedCats) {
+    const pct = Math.round((n / catMax) * 100);
+    bars.innerHTML += `
+      <div class="ov-bar-row">
+        <div class="ov-bar-label">${cat}</div>
+        <div class="ov-bar-track"><div class="ov-bar-fill" style="width:${pct}%"></div></div>
+        <div class="ov-bar-n">${n}</div>
+      </div>`;
+  }
+
+  // Summary boxes
+  const grid = document.getElementById('ov-summary-grid');
+  const items = [
+    { label: 'Total Sites', value: d.total_sites },
+    { label: 'Total Scans', value: d.total_scans },
+    { label: 'Blacklisted', value: d.blacklisted, cls: d.blacklisted > 0 ? 'danger' : '' },
+    { label: 'High/Critical Risk', value: d.high_risk, cls: d.high_risk > 0 ? 'danger' : '' },
+    { label: 'Valid Canary', value: d.canary_valid, cls: d.canary_valid > 0 ? '' : 'warn' },
+    { label: 'Reachable', value: d.reachable },
+  ];
+  grid.innerHTML = '';
+  for (const b of items) {
+    grid.innerHTML += `
+      <div class="stat-box">
+        <div class="stat-box-label">${b.label}</div>
+        <div class="stat-box-value ${b.cls || ''}">${b.value}</div>
+      </div>`;
+  }
+
+  // destroy old batch charts
+  ['ov-batch-bars', 'ov-batch-trend'].forEach(k => {
+    if (chartInstances[k]) { chartInstances[k].destroy(); delete chartInstances[k]; }
+  });
+
+  // fetch and render batch charts
+  try {
+    const bd = await apiFetch('/api/batches');
+    const batches = bd.batches;
+
+    if (batches.length) {
+      const blabels = batches.map(b => (b.batch_id || b.ingested_at || '').slice(0, 16)).reverse();
+      const bdata = [...batches].reverse();
+
+      // grouped bar chart
+      const bCtx = document.getElementById('ov-chart-batch-bars');
+      if (bCtx) {
+        chartInstances['ov-batch-bars'] = new Chart(bCtx, {
+          type: 'bar',
+          data: {
+            labels: blabels,
+            datasets: [
+              {
+                label: 'Total URLs',
+                data: bdata.map(b => b.total_reports),
+                backgroundColor: '#1a4d2e',
+                borderColor: '#00cc44',
+                borderWidth: 1,
+              },
+              {
+                label: 'Reachable',
+                data: bdata.map(b => b.reachable_count),
+                backgroundColor: '#003322',
+                borderColor: '#00aa33',
+                borderWidth: 1,
+              },
+              {
+                label: 'Blacklisted',
+                data: bdata.map(b => b.blacklisted_count),
+                backgroundColor: '#3a0000',
+                borderColor: '#ff3333',
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true,
+                labels: { color: '#888', font: { family: 'Courier New', size: 9 }, boxWidth: 10, padding: 8 },
+              },
+            },
+            scales: {
+              x: { ticks: { color: '#555', font: { family: 'Courier New', size: 9 }, maxRotation: 20 }, grid: { color: '#1a1a1a' } },
+              y: { ticks: { color: '#555', font: { family: 'Courier New', size: 9 } }, grid: { color: '#1a1a1a' }, beginAtZero: true },
+            },
+          },
+        });
+      }
+
+      // trend line chart
+      const tCtx = document.getElementById('ov-chart-batch-trend');
+      if (tCtx) {
+        chartInstances['ov-batch-trend'] = new Chart(tCtx, {
+          type: 'line',
+          data: {
+            labels: blabels,
+            datasets: [
+              {
+                label: 'Avg Risk Score',
+                data: bdata.map(b => b.avg_risk_score ? +b.avg_risk_score.toFixed(1) : null),
+                borderColor: '#ff6600',
+                backgroundColor: 'rgba(255,100,0,0.06)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+                yAxisID: 'yR',
+              },
+              {
+                label: 'Avg Sec Headers',
+                data: bdata.map(b => b.avg_sec_headers ? +b.avg_sec_headers.toFixed(2) : null),
+                borderColor: '#00cccc',
+                backgroundColor: 'transparent',
+                tension: 0.3,
+                pointRadius: 3,
+                yAxisID: 'yH',
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true,
+                labels: { color: '#888', font: { family: 'Courier New', size: 9 }, boxWidth: 10, padding: 8 },
+              },
+            },
+            scales: {
+              x:  { ticks: { color: '#555', font: { family: 'Courier New', size: 9 }, maxRotation: 20 }, grid: { color: '#1a1a1a' } },
+              yR: { position: 'left',  min: 0, max: 100, ticks: { color: '#ff6600', font: { family: 'Courier New', size: 9 } }, grid: { color: '#1a1a1a' } },
+              yH: { position: 'right', min: 0, max: 7,   ticks: { color: '#00cccc', font: { family: 'Courier New', size: 9 } }, grid: { display: false } },
+            },
+          },
+        });
+      }
+    }
+  } catch(e) {
+    console.error('batch chart error', e);
+  }
+}
+
+// File upload / ingest
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.add('drag-over');
+}
+function handleDragLeave(e) {
+  document.getElementById('upload-zone').classList.remove('drag-over');
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) uploadFile(file);
+}
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) uploadFile(file);
+  e.target.value = '';
+}
+
+async function uploadFile(file) {
+  const status = document.getElementById('upload-status');
+  status.className = '';
+  status.textContent = `Ingesting ${file.name}...`;
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const r = await fetch(API + '/api/ingest', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || JSON.stringify(d));
+    status.className = 'ok';
+    status.textContent = `✓ ${d.ingested} ingested, ${d.skipped} skipped`;
+    await loadStats();
+    await loadSites();
+    toast(`Ingest complete: ${d.ingested} reports added.`);
+  } catch(e) {
+    status.className = 'err';
+    status.textContent = '✗ ' + e.message;
+    toast('Ingest failed: ' + e.message, true);
+  }
+}
+
+// Utilities
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function toast(msg, isErr = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = 'show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 3500);
+}
+
+// Boot
+init().catch(e => {
+  document.getElementById('loading-overlay').innerHTML =
+    `<div style="color:var(--red);padding:20px;text-align:center;">
+      <strong>Khaeos failed to connect to the backend.</strong><br><br>
+      Make sure d_khaeos.py is running:<br>
+      <code style="color:var(--green)">python d_khaeos.py</code>
+    </div>`;
+});
+</script>
+</body>
+</html>

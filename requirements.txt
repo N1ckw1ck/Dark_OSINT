@@ -1,0 +1,17 @@
+# d_mnemosyne.py, d_erebus.py need
+python-gnupg 
+stem
+beautifulsoup4
+requests[socks] # will pull PySocks too
+
+# d_erebus needs
+# Needs is a strong word but it won't be near as readable
+# or ~pretty~
+rich
+
+# d_khaeos.py needs
+fastapi
+uvicorn
+python-multipart
+
+# pgp_verify just needs python-gnupg
