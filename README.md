@@ -9,6 +9,7 @@
 - [Erebus](#erebus-dark-web-search)
 - [Hemera](#hemera-url-extractor)
 - [Mnemosyne](#mnemosyne-onion-link-recon)
+- [Khaeos](#khaeos-control-center)
 - [Other Tools](#other-possibly-helpful-tools)
 ---
 
@@ -31,14 +32,20 @@
 
 #### Pipeline (if desired)
 
-##### Erebus → Hemera → Mnemosyne
+##### Erebus → Hemera → Mnemosyne → Khaeos
 ##### Example flow:
 
 ```bash
 python d_erebus.py --pages 5 --save-j
 python d_hemera.py Erebus_<query>_<timestamp>.json
 python d_mnemosyne.py --batch erebus_urls_<query>_<timestamp>.txt --save
+python d_khaeos.py --ingest Mnemosyne_batch_.json --serve
 ```
+1. Erebus scrapes the dark net. It can certainly be used as a stand-alone tool.
+2. Hemera ingests the JSON output of Erebus, and outputs a clean .txt list of the URLs found.
+3. Mnemosyne conducts a pre-visit security analysis of .onion addresses it is fed. It is a standalone tool.
+4. Mnemosyne can also be ran in batch mode with the .txt output of Hemera, producing a group summary.
+5. Khaeos ingests single-scan and batch Mnemosyne JSON files, building a custom intelligence index.
 
 ---
 
@@ -137,6 +144,7 @@ Update the .onion links in `d_erebus.py` if they fail.
 
 #### Parses a d_erebus.py JSON output file and extracts all .onion URLs for batch scanning with d_mnemosyne.py.
 #### Link-farm flagged hosts are excluded by default. Outputs a clean text file, one URL per line.
+##### Really only useful if using the pipeline
 ---
 
 ### Requirements
@@ -278,6 +286,92 @@ python d_mnemosyne.py --batch <url_list.txt> # Multiple link batch scan
 
 ---
 
+![Khaeos](assets/khaeosbanner.png)
+## Khaeos Control Center
+
+#### Persistent intelligence index and time-series intelligence tracker for .onion sites.
+#### Consumes Mnemosyne JSON output and builds a queryable local database with full scan history per site.
+---
+
+### Requirements
+```
+pip install fastapi uvicorn
+```
+
+---
+
+### Usage
+```bash
+python d_khaeos.py # start the web UI (localhost:7777)
+python d_khaeos.py --ingest <Mnemosyne_file.json> # ingest a file, then exit
+python d_khaeos.py --ingest <Mnemosyne_file.json> --serve # ingest then start the UI
+python d_khaeos.py --db <path/to/khaeos.db> # use a custom database path
+```
+
+Both single-scan (`Mnemosyne_<host>.json`) and batch (`Mnemosyne_batch_<timestamp>.json`) output files are supported. Duplicate scans (same host + scan time) are silently skipped on re-ingest.
+
+---
+
+### How It Works
+
+1. **Ingest** — parses Mnemosyne JSON (single or batch), extracts all reachability, risk, header, canary, script, and resource data into a local SQLite database. Each scan is stored in full with key fields also extracted as queryable columns. Batch files are tracked as named batches with aggregate statistics.
+
+2. **Site profiles** — one row per canonical `.onion` host, updated on every ingest. Tracks uptime percentage, rolling average latency, risk score history, blacklist status, canary validity streak, clearnet leak flags, and security header counts across all scans.
+
+3. **Time-series tracking** — every scan is stored individually, allowing per-site charts of reachability, latency, risk score, security headers, and script count over time; this allows visibility of risk score drift between scans.
+
+4. **Category inference** — site titles and snippets are matched against keyword lists to automatically assign categories (forum, market, chat, email, news, wiki, leaks, crypto, hacking, hosting, social, search, privacy, services). Category can be overridden manually via the UI.
+
+5. **Safety-focused search** — results can be filtered by risk level, reachability, blacklist status, clearnet leak presence, canary validity, and category simultaneously. Ranking surfaces trust signals rather than relevance.
+
+6. **Persistent storage** — all data lives in a single SQLite file (`khaeos.db` by default). Point `--db` at any path including an external drive to store the database wherever you want. The database grows indefinitely — scans accumulate forever and nothing is overwritten.
+
+---
+
+### Web UI
+
+The UI opens automatically in your browser at `http://127.0.0.1:7777` when the server starts. It consists of four tabs:
+
+| Tab | Description |
+|-----|-------------|
+| **Index** | Searchable, filterable site list with per-site security badges, uptime, and latency. Click any entry for full detail view with time-series charts. |
+| **Overview** | Dashboard showing risk distribution, sites by category, batch comparison charts, and batch trend lines across ingests. |
+| **Terminal** | Command-line interface for database queries and management. |
+| **Journal** | Persistent canvas for freehand notes, labeled boxes, and directional connectors. Auto-saves every 60 seconds. |
+
+---
+
+### Database
+
+The database uses SQLite with WAL mode enabled. Three tables:
+
+| Table | Description |
+|-------|-------------|
+| `sites` | One row per canonical host. Aggregate stats updated on every ingest. |
+| `scans` | One row per scan run. Full JSON blob plus extracted columns for fast filtering. |
+| `batches` | One row per batch ingest. Aggregate stats per batch for trend analysis. |
+
+The database file is portable — copy it to back it up, move it between machines, or open it directly with any SQLite browser. To use an external drive:
+
+```bash
+python d_khaeos.py --db /Path/To/Drive/khaeos_folder/khaeos.db
+```
+
+Can add a shell alias so the path is never forgotten:
+```bash
+alias khaeos='python /path/to/d_khaeos.py --db /Path/To/Drive/khaeos_folder/khaeos.db'
+```
+
+---
+
+### Important Notes
+
+- **Khaeos does not scan anything.** It is purely a storage and visualization layer. All scanning is performed by Mnemosyne. It is a local web app not exposed to the internet.
+- The database accumulates scan history indefinitely. There is no automatic pruning. Disk usage grows proportionally to the number of sites and scan frequency.
+- Batch aggregate statistics (average risk score, reachability, etc.) are computed at ingest time and are not recalculated if individual scans are later deleted via `db --delete-row` (Terminal command).
+- `khaeos_journal.json` is saved alongside `khaeos.db` and persists the Journal canvas across sessions, both files should be included in any backup of the database directory.
+
+---
 
 ## Other (possibly) Helpful Tools
 

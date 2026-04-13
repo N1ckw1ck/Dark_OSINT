@@ -17,7 +17,7 @@ Output:
   • Summary printed to stdout
 
 Usage:
-  python d_url_extract.py <erebus_json> [--output FILE] [--full-paths] [--include-farms] [--no-save]
+  python d_hemera.py <erebus_json> [--output FILE] [--full-paths] [--include-farms] [--no-save]
 
   <erebus_json>      Path to JSON file saved by d_erebus.py (required)
   --output FILE      Output filename (default: erebus_urls_<timestamp>.txt)
@@ -225,7 +225,7 @@ def main() -> int:
             fh.write(url + '\n')
 
     print(f'{G}  URLs saved → {output_file}{RESET}')
-    print(f'{DIM}  Feed to Mnemosyne with: python d_mnemosyne.py --batch {output_file}{RESET}\n')
+    print(f'{DIM}  Feed to Mnemosyne with: python d_mnemosyne.py --batch {output_file} --save{RESET}\n')
 
     return 0
 

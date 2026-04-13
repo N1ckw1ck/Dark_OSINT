@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 '''
-d_khaeos.py — Khaeos Dark Web Search Index
+d_khaeos.py — Khaeos Dark Web Intelligence Index
 
 Local FastAPI-backed search index and time-series tracker for .onion sites.
 Consumes JSON output from d_mnemosyne.py (single-scan or batch) and builds
@@ -794,6 +794,107 @@ def create_app(db_path: Path) -> 'FastAPI':
     @app.get('/api/categories')
     async def list_categories() -> JSONResponse: # type: ignore
         return JSONResponse({'categories': list(CATEGORY_KEYWORDS.keys())}) # type: ignore
+    
+    @app.get('/api/terminal/random')
+    async def terminal_random() -> JSONResponse: # type: ignore
+        with get_db(db_path) as conn:
+            row = conn.execute('''
+                SELECT host, page_title, last_risk_level, last_risk_score,
+                       last_seen, uptime_pct, category
+                FROM sites
+                WHERE blacklisted = 0 AND uptime_pct > 50
+                ORDER BY RANDOM() LIMIT 1
+            ''').fetchone()
+        if not row:
+            return JSONResponse({'result': 'No qualifying sites found (need uptime > 50%, not blacklisted).'}) # type: ignore
+        return JSONResponse({'result': dict(row)}) # type: ignore
+
+    @app.get('/api/terminal/top5')
+    async def terminal_top5() -> JSONResponse: # type: ignore
+        with get_db(db_path) as conn:
+            rows = conn.execute('''
+                SELECT host, page_title, last_risk_level, last_risk_score,
+                       uptime_pct, category
+                FROM sites
+                WHERE scans_reachable > 0
+                AND last_risk_level IN ('CRITICAL','HIGH','MEDIUM')
+                ORDER BY last_risk_score DESC LIMIT 5
+            ''').fetchall()
+        return JSONResponse({'results': [dict(r) for r in rows]}) # type: ignore
+
+    @app.get('/api/terminal/stats')
+    async def terminal_stats() -> JSONResponse: # type: ignore
+        with get_db(db_path) as conn:
+            sites = conn.execute('SELECT COUNT(*) FROM sites').fetchone()[0]
+            scans = conn.execute('SELECT COUNT(*) FROM scans').fetchone()[0]
+            batches = conn.execute('SELECT COUNT(*) FROM batches').fetchone()[0]
+            blacklist = conn.execute('SELECT COUNT(*) FROM sites WHERE blacklisted=1').fetchone()[0]
+            canary = conn.execute('SELECT COUNT(*) FROM sites WHERE canary_valid=1').fetchone()[0]
+            high = conn.execute("SELECT COUNT(*) FROM sites WHERE last_risk_level IN ('HIGH','CRITICAL')").fetchone()[0]
+            db_size = db_path.stat().st_size if db_path.exists() else 0
+        return JSONResponse({ # type: ignore
+            'sites': sites, 'scans': scans, 'batches': batches,
+            'blacklisted': blacklist, 'canary_valid': canary,
+            'high_risk': high, 'db_path': str(db_path),
+            'db_size_mb': round(db_size / 1024 / 1024, 2),
+        })
+
+    @app.get('/api/terminal/view-site')
+    async def terminal_view_site(host: str = Query('')) -> JSONResponse: # type: ignore
+        if not host:
+            return JSONResponse({'error': 'No host specified'}) # type: ignore
+        with get_db(db_path) as conn:
+            site = conn.execute('SELECT * FROM sites WHERE host = ?', (host,)).fetchone()
+            if not site:
+                return JSONResponse({'error': f'Host not found: {host}'}) # type: ignore
+            scans = conn.execute(
+                'SELECT scan_time, reachable, latency_ms, risk_level, risk_score, blacklisted, has_canary, canary_valid FROM scans WHERE host = ? ORDER BY scan_time DESC LIMIT 20',
+                (host,)
+            ).fetchall()
+        return JSONResponse({'site': dict(site), 'scans': [dict(s) for s in scans]}) # type: ignore
+
+    @app.get('/api/terminal/id-nulls')
+    async def terminal_id_nulls() -> JSONResponse: # type: ignore
+        with get_db(db_path) as conn:
+            rows = conn.execute('''
+                SELECT s.host, s.first_seen, s.category
+                FROM sites s
+                LEFT JOIN scans sc ON s.id = sc.site_id
+                WHERE sc.id IS NULL
+            ''').fetchall()
+        return JSONResponse({'results': [dict(r) for r in rows]}) # type: ignore
+
+    @app.delete('/api/terminal/delete-site')
+    async def terminal_delete_site(host: str = Query('')) -> JSONResponse: # type: ignore
+        if not host:
+            return JSONResponse({'error': 'No host specified'}) # type: ignore
+        with get_db(db_path) as conn:
+            site = conn.execute('SELECT id FROM sites WHERE host = ?', (host,)).fetchone()
+            if not site:
+                return JSONResponse({'error': f'Host not found: {host}'}) # type: ignore
+            site_id = site['id']
+            scans_deleted = conn.execute('SELECT COUNT(*) FROM scans WHERE site_id = ?', (site_id,)).fetchone()[0]
+            conn.execute('DELETE FROM scans WHERE site_id = ?', (site_id,))
+            conn.execute('DELETE FROM sites WHERE id = ?', (site_id,))
+        return JSONResponse({'ok': True, 'host': host, 'scans_deleted': scans_deleted}) # type: ignore
+    
+    @app.get('/api/journal')
+    async def journal_load() -> JSONResponse: # type: ignore
+        journal_path = db_path.parent / 'khaeos_journal.json'
+        if journal_path.exists():
+            try:
+                data = json.loads(journal_path.read_text(encoding='utf-8'))
+                return JSONResponse(data) # type: ignore
+            except Exception:
+                pass
+        return JSONResponse({'version': 1, 'vpX': 0, 'vpY': 0, 'vpZ': 1, # type: ignore
+                             'strokes': [], 'boxes': [], 'connectors': [], 'nextId': 1})
+
+    @app.post('/api/journal')
+    async def journal_save(body: dict[str, Any]) -> JSONResponse: # type: ignore
+        journal_path = db_path.parent / 'khaeos_journal.json'
+        journal_path.write_text(json.dumps(body), encoding='utf-8')
+        return JSONResponse({'ok': True}) # type: ignore
 
     return app
 

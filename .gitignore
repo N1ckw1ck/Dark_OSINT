@@ -3,9 +3,14 @@ notes.txt
 
 /venv
 .DS_Store
+*/.DS_Store
 
 
 Erebus_*.json
 Erebus_*.html
 erebus_*.txt
 Mnemosyne_*.json
+
+Khaeos/khaeos_journal.json
+Khaeos/khaeos.db
+Khaeos/preview2.html
