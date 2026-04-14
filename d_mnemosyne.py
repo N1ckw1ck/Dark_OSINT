@@ -1646,41 +1646,6 @@ def save_report(report: OnionReport) -> None:
         json.dump(data, fh, indent=2, ensure_ascii=False)
     print(f'{G}  Report saved → {filename}{RESET}\n')
 
-    data: dict[str, Any] = {
-        'scan_time': report.scan_time,
-        'target': report.target,
-        'tor': asdict(report.tor),
-        'reachability': asdict(report.reachability),
-        'reputation': asdict(report.reputation) if report.reputation else None,
-        'headers': asdict(report.headers) if report.headers else None,
-        'well_known': [asdict(wk) for wk in report.well_known],
-        'canary': asdict(report.canary) if report.canary else None,
-        'scripts': asdict(report.scripts) if report.scripts else None,
-        'resources': {
-            'total_external_resources': report.resources.total_external_resources,
-            'clearnet_leaks': [asdict(l) for l in report.resources.clearnet_leaks],
-            'onion_resources': [asdict(l) for l in report.resources.onion_resources],
-            'iframes': report.resources.iframes,
-            'clearnet_links': report.resources.clearnet_links,
-            'onion_links': report.resources.onion_links,
-        } if report.resources else None,
-        'forms': asdict(report.forms) if report.forms else None,
-        'tech': asdict(report.tech) if report.tech else None,
-        'risk': asdict(report.risk) if report.risk else None,
-        'page_title': report.page_title,
-        'raw_html_length': report.raw_html_length,
-    }
-
-    parsed = urlparse(report.target)
-    host = parsed.netloc or parsed.path
-    safe_name = re.sub(r'[^\w.-]', '_', host)
-    filename = f'mnemosyne_{safe_name}.json'
-
-    with open(filename, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, indent=2, ensure_ascii=False)
-
-    print(f'{G}  Report saved → {filename}{RESET}\n')
-
 def save_batch_report(reports: list[OnionReport], url_source: str) -> str:
     blacklisted = [r for r in reports if r.reputation and r.reputation.blacklisted]
     clearnet_redirects = [r for r in reports if r.reachability.clearnet_redirect]

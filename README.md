@@ -263,6 +263,7 @@ python d_mnemosyne.py --batch <url_list.txt> # Multiple link batch scan
 ##### Single URL scan
 ![d_mnemosyne1](assets/d_mnemosyne1.png)
 ![d_mnemosyne2](assets/d_mnemosyne2.png)
+![d_mnemosyne2](assets/d_mnemosyne3.png)
 
 ##### If ran in batch mode (following pipeline or with custom .txt URL list)
 ![d_mnemosyne_batch](assets/d_mnemosyne_batch.png)
