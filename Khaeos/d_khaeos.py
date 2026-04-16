@@ -186,6 +186,11 @@ CREATE TABLE IF NOT EXISTS batches (
     avg_sec_headers REAL DEFAULT 0.0
 );
 
+CREATE TABLE IF NOT EXISTS custom_categories (
+    name TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_scans_site_id ON scans(site_id);
 CREATE INDEX IF NOT EXISTS idx_scans_scan_time ON scans(scan_time);
 CREATE INDEX IF NOT EXISTS idx_sites_host ON sites(host);
@@ -527,14 +532,14 @@ def create_app(db_path: Path) -> 'FastAPI':
         allow_headers=['*'],
     )
 
- # Serve UI
+    # Serve UI
     @app.get('/', response_class=HTMLResponse) # type: ignore
     async def serve_ui() -> HTMLResponse: # type: ignore
         if UI_FILE.exists():
             return HTMLResponse(content=UI_FILE.read_text(encoding='utf-8')) # type: ignore
         return HTMLResponse(content='<h1>khaeos_ui.html not found</h1>', status_code=404) # type: ignore
 
- # Stats overview
+    # Stats overview
     @app.get('/api/stats')
     async def get_stats() -> JSONResponse: # type: ignore
         with get_db(db_path) as conn:
@@ -565,7 +570,7 @@ def create_app(db_path: Path) -> 'FastAPI':
             'risk_dist': [dict(r) for r in risk_dist],
         })
 
- # Search / list sites
+    # Search / list sites
     @app.get('/api/sites')
     async def search_sites( # type: ignore
         q: str = Query(''), # type: ignore
@@ -634,7 +639,7 @@ def create_app(db_path: Path) -> 'FastAPI':
             'sites': [dict(r) for r in rows],
         })
 
- # Single site detail
+    # Single site detail
     @app.get('/api/sites/{host:path}')
     async def get_site(host: str) -> JSONResponse: # type: ignore
         host = host.strip('/')
@@ -651,7 +656,7 @@ def create_app(db_path: Path) -> 'FastAPI':
             'scans': [dict(s) for s in scans],
         })
 
- # Time-series data for charts
+    # Time-series data for charts
     @app.get('/api/timeseries/{host:path}')
     async def get_timeseries(host: str) -> JSONResponse: # type: ignore
         host = host.strip('/')
@@ -695,7 +700,7 @@ def create_app(db_path: Path) -> 'FastAPI':
 
         return JSONResponse(series) # type: ignore
 
- # Full scan JSON for a single scan
+    # Full scan JSON for a single scan
     @app.get('/api/scan/{scan_id}')
     async def get_scan_detail(scan_id: int) -> JSONResponse: # type: ignore
         with get_db(db_path) as conn:
@@ -708,7 +713,7 @@ def create_app(db_path: Path) -> 'FastAPI':
             data = {}
         return JSONResponse(data) # type: ignore
 
- # Update site metadata (tags, notes, category)
+    # Update site metadata (tags, notes, category)
     @app.patch('/api/sites/{host:path}')
     async def update_site(host: str, body: dict[str, Any]) -> JSONResponse: # type: ignore
         host = host.strip('/')
@@ -724,7 +729,7 @@ def create_app(db_path: Path) -> 'FastAPI':
             )
         return JSONResponse({'ok': True, 'updated': list(updates.keys())}) # type: ignore
 
- # Ingest via file upload
+    # Ingest via file upload
     @app.post('/api/ingest')
     async def ingest_upload(file: UploadFile = File(...)) -> JSONResponse: # type: ignore
         try:
@@ -790,10 +795,47 @@ def create_app(db_path: Path) -> 'FastAPI':
             ).fetchall()
         return JSONResponse({'batches': [dict(r) for r in rows]}) # type: ignore
 
- # Categories list
+    # Categories list
     @app.get('/api/categories')
     async def list_categories() -> JSONResponse: # type: ignore
-        return JSONResponse({'categories': list(CATEGORY_KEYWORDS.keys())}) # type: ignore
+        with get_db(db_path) as conn:
+            rows = conn.execute('SELECT name FROM custom_categories ORDER BY created_at ASC').fetchall()
+        custom = [r['name'] for r in rows]
+        all_cats = list(CATEGORY_KEYWORDS.keys()) + [c for c in custom if c not in CATEGORY_KEYWORDS]
+        return JSONResponse({'categories': all_cats, 'custom': custom}) # type: ignore
+
+    # Create custom category
+    @app.post('/api/custom-categories')
+    async def create_custom_category(body: dict[str, Any]) -> JSONResponse: # type: ignore
+        name: str = str(body.get('name', '')).strip().lower()
+        if not name:
+            raise HTTPException(status_code=400, detail='name is required') # type: ignore
+        if name in CATEGORY_KEYWORDS:
+            raise HTTPException(status_code=409, detail='Category already exists as a built-in') # type: ignore
+        created_at = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        with get_db(db_path) as conn:
+            try:
+                conn.execute(
+                    'INSERT INTO custom_categories (name, created_at) VALUES (?, ?)',
+                    (name, created_at)
+                )
+            except sqlite3.IntegrityError:
+                raise HTTPException(status_code=409, detail='Category already exists') # type: ignore
+        return JSONResponse({'ok': True, 'name': name}) # type: ignore
+
+    # Delete custom category
+    @app.delete('/api/custom-categories/{name}')
+    async def delete_custom_category(name: str) -> JSONResponse: # type: ignore
+        name = name.strip().lower()
+        if name in CATEGORY_KEYWORDS:
+            raise HTTPException(status_code=400, detail='Cannot delete built-in categories') # type: ignore
+        with get_db(db_path) as conn:
+            # Reassign any sites using this category to uncategorized
+            conn.execute(
+                "UPDATE sites SET category = 'uncategorized' WHERE category = ?", (name,)
+            )
+            conn.execute('DELETE FROM custom_categories WHERE name = ?', (name,))
+        return JSONResponse({'ok': True, 'name': name}) # type: ignore
     
     @app.get('/api/terminal/random')
     async def terminal_random() -> JSONResponse: # type: ignore
@@ -863,6 +905,96 @@ def create_app(db_path: Path) -> 'FastAPI':
                 WHERE sc.id IS NULL
             ''').fetchall()
         return JSONResponse({'results': [dict(r) for r in rows]}) # type: ignore
+    
+    @app.get('/api/terminal/print-urls')
+    async def terminal_print_urls( # type: ignore
+        category: str = Query(''), # type: ignore
+        n: int = Query(0), # type: ignore  0 = all
+    ) -> JSONResponse: # type: ignore
+        where = 'WHERE category = ?' if category else ''
+        params: list[Any] = [category] if category else []
+        limit_clause = f'LIMIT {max(1, n)}' if n > 0 else ''
+        sql = f'''
+            SELECT host, uptime_pct, last_risk_level, last_risk_score,
+                   blacklisted, last_seen, page_title, category
+            FROM sites {where}
+            ORDER BY last_risk_score DESC
+            {limit_clause}
+        '''
+        with get_db(db_path) as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return JSONResponse({'results': [dict(r) for r in rows]}) # type: ignore
+
+    @app.post('/api/terminal/save-urls')
+    async def terminal_save_urls(body: dict[str, Any]) -> JSONResponse: # type: ignore
+        import re as _re
+        category: str = str(body.get('category', ''))
+        n: int = int(body.get('n', 0))
+        verbose: bool = bool(body.get('verbose', False))
+        filename: str = str(body.get('filename', ''))
+        save_path: str = str(body.get('path', ''))
+
+        where = 'WHERE category = ?' if category else ''
+        params: list[Any] = [category] if category else []
+        limit_clause = f'LIMIT {max(1, n)}' if n > 0 else ''
+        sql = f'''
+            SELECT host, uptime_pct, last_risk_level, last_risk_score,
+                   blacklisted, clearnet_leak, has_canary, canary_valid,
+                   last_seen, page_title, category, web_server, total_scans,
+                   scans_reachable, avg_latency_ms, tags, notes
+            FROM sites {where}
+            ORDER BY last_risk_score DESC
+            {limit_clause}
+        '''
+        with get_db(db_path) as conn:
+            rows = conn.execute(sql, params).fetchall()
+
+        if not rows:
+            return JSONResponse({'ok': False, 'error': 'No results matched'}) # type: ignore
+
+        if not filename:
+            safe_cat = _re.sub(r'[^\w.-]', '_', category) if category else 'all'
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f'khaeos_urls_{safe_cat}_{ts}.txt'
+
+        out_dir = Path(save_path) if save_path else db_path.parent
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / filename
+
+        lines: list[str] = []
+        lines.append(f'# Khaeos URL Export')
+        lines.append(f'# Category: {category or "all"}  |  Count: {len(rows)}  |  Verbose: {verbose}')
+        lines.append(f'# Generated: {datetime.now().isoformat()}')
+        lines.append('')
+
+        for r in rows:
+            d = dict(r)
+            lines.append(f'http://{d["host"]}/')
+            if verbose:
+                uptime = f'{d["uptime_pct"]:.1f}%' if d['uptime_pct'] is not None else '—'
+                lat = f'{d["avg_latency_ms"]:.0f}ms' if d['avg_latency_ms'] is not None else '—'
+                lines.append(f'  title      : {d["page_title"] or "—"}')
+                lines.append(f'  category   : {d["category"]}')
+                lines.append(f'  risk       : {d["last_risk_level"]} ({d["last_risk_score"]})')
+                lines.append(f'  uptime     : {uptime}  ({d["scans_reachable"]}/{d["total_scans"]} scans)')
+                lines.append(f'  latency    : {lat}')
+                lines.append(f'  blacklisted: {"YES" if d["blacklisted"] else "no"}')
+                lines.append(f'  clearnet   : {"LEAK" if d["clearnet_leak"] else "clean"}')
+                lines.append(f'  canary     : {"valid" if d["canary_valid"] else "present" if d["has_canary"] else "none"}')
+                lines.append(f'  server     : {d["web_server"] or "—"}')
+                lines.append(f'  last seen  : {(d["last_seen"] or "")[:10]}')
+                if d['tags']:
+                    lines.append(f'  tags       : {d["tags"]}')
+                if d['notes']:
+                    lines.append(f'  notes      : {d["notes"]}')
+                lines.append('')
+
+        out_path.write_text('\n'.join(lines), encoding='utf-8')
+        return JSONResponse({ # type: ignore
+            'ok': True,
+            'path': str(out_path),
+            'count': len(rows),
+        })
 
     @app.delete('/api/terminal/delete-site')
     async def terminal_delete_site(host: str = Query('')) -> JSONResponse: # type: ignore

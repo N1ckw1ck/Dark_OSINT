@@ -1359,21 +1359,45 @@ async function loadStats() {
   } catch(e) { console.error('stats error', e); }
 }
 
+let customCategories = [];
+
 async function loadCategories() {
   try {
     const d = await apiFetch('/api/categories');
     categories = d.categories;
+    customCategories = d.custom || [];
     const list = document.getElementById('cat-list');
     list.innerHTML = '';
+
     for (const cat of categories) {
       if (cat === 'uncategorized') continue;
+      const isCustom = customCategories.includes(cat);
       const btn = document.createElement('button');
       btn.className = 'cat-btn';
       btn.dataset.cat = cat;
-      btn.onclick = () => setCategoryFilter(cat);
-      btn.innerHTML = `<span class="cat-dot"></span> ${cat}<span class="cat-n" id="cat-n-${cat}"></span>`;
+      btn.style.display = 'flex';
+      btn.style.alignItems = 'center';
+      btn.style.justifyContent = 'space-between';
+      btn.style.width = '100%';
+      const left = document.createElement('span');
+      left.innerHTML = `<span class="cat-dot"></span> ${esc(cat)}<span class="cat-n" id="cat-n-${cat}"></span>`;
+      left.onclick = () => setCategoryFilter(cat);
+      left.style.flex = '1';
+      left.style.cursor = 'pointer';
+      btn.appendChild(left);
+      if (isCustom) {
+        const del = document.createElement('span');
+        del.textContent = '×';
+        del.title = 'Delete category';
+        del.style.cssText = 'color:var(--dim);cursor:pointer;padding:0 4px;font-size:14px;line-height:1;';
+        del.onmouseenter = () => del.style.color = 'var(--red)';
+        del.onmouseleave = () => del.style.color = 'var(--dim)';
+        del.onclick = (e) => { e.stopPropagation(); deleteCustomCategory(cat); };
+        btn.appendChild(del);
+      }
       list.appendChild(btn);
     }
+
     // uncategorized at end
     const ub = document.createElement('button');
     ub.className = 'cat-btn';
@@ -1382,14 +1406,57 @@ async function loadCategories() {
     ub.innerHTML = `<span class="cat-dot"></span> uncategorized<span class="cat-n" id="cat-n-uncategorized"></span>`;
     list.appendChild(ub);
 
+    // add-category row
+    const addRow = document.createElement('div');
+    addRow.style.cssText = 'display:flex;gap:4px;margin-top:6px;';
+    addRow.innerHTML = `
+      <input id="new-cat-input" type="text" placeholder="new category…"
+        style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--green);
+               font-family:var(--font);font-size:11px;padding:3px 6px;outline:none;min-width:0;">
+      <button id="new-cat-btn"
+        style="background:var(--bg3);border:1px solid var(--border);color:var(--green);
+               font-family:var(--font);font-size:11px;padding:3px 7px;cursor:pointer;">+</button>
+    `;
+    list.appendChild(addRow);
+    const inp = document.getElementById('new-cat-input');
+    const btn2 = document.getElementById('new-cat-btn');
+    const doAdd = async () => {
+      const name = inp.value.trim().toLowerCase();
+      if (!name) return;
+      try {
+        await fetch(API + '/api/custom-categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        inp.value = '';
+        await loadCategories();
+        await loadStats();
+      } catch(e) { toast('Failed to create category: ' + e.message, true); }
+    };
+    btn2.onclick = doAdd;
+    inp.onkeydown = (e) => { if (e.key === 'Enter') doAdd(); };
+
     // populate detail cat select
     const sel = document.getElementById('detail-cat-select');
+    sel.innerHTML = '';
     for (const cat of categories) {
       const opt = document.createElement('option');
       opt.value = cat; opt.textContent = cat;
       sel.appendChild(opt);
     }
   } catch(e) { console.error('cats error', e); }
+}
+
+async function deleteCustomCategory(name) {
+  if (!confirm(`Delete category "${name}"?\nSites assigned to it will revert to uncategorized.`)) return;
+  try {
+    await fetch(API + '/api/custom-categories/' + encodeURIComponent(name), { method: 'DELETE' });
+    if (state.category === name) { state.category = ''; state.offset = 0; }
+    await loadCategories();
+    await loadStats();
+    await loadSites();
+  } catch(e) { toast('Failed to delete category: ' + e.message, true); }
 }
 
 async function loadSites() {
@@ -2183,8 +2250,10 @@ async function handleTermCmd(raw) {
       ['db --view-site <host>', 'Show scan history for a specific host'],
       ['db --delete-row <host>', 'Delete a site and all its scans'],
       ['db --id-nulls', 'List sites with no associated scans'],
-      ['flip', 'Reverse globe rotation direction'],
-      ['switch', 'Cycle globe ASCII character set'],
+      ['print --urls --[category] [N]', 'Print URLs for a category (N optional, 0=all)'],
+      ['save --urls --[category] [N] [filename] [path]', 'Save URLs to file (append --verbose for full intel)'],
+      ['flip', 'Flip'],
+      ['switch', 'Switch'],
     ];
     for (const [c, d] of cmds) {
       termPrint(`  <span style="color:var(--cyan)">${c.padEnd(32)}</span><span style="color:var(--dim)">${d}</span>`);
@@ -2207,7 +2276,7 @@ async function handleTermCmd(raw) {
     try {
       const d = await apiFetch('/api/terminal/stats');
       termDivider();
-      termPrint('<span style="color:var(--green-bright)">  ⬛ KHAEOS — Dark Web Intelligence Index</span>');
+      termPrint('<span style="color:var(--green-bright)">  ✵ KHAEOS — Dark Web Intelligence Index</span>');
       termPrint(`  <span style="color:var(--dim)">Database    :</span> <span style="color:var(--cyan)">${esc(d.db_path)}</span>`);
       termPrint(`  <span style="color:var(--dim)">DB Size     :</span> ${d.db_size_mb} MB`);
       termPrint(`  <span style="color:var(--dim)">Sites       :</span> <span style="color:var(--green)">${d.sites}</span>`);
@@ -2337,6 +2406,75 @@ async function handleTermCmd(raw) {
     } else {
       termPrint(`Unknown db flag: ${esc(flag)}. Try "help" for usage.`, 'var(--amber)');
     }
+
+  } else if (cmd === 'print') {
+    // print --urls --[category] [N]
+    if (args[0] !== '--urls') {
+      termPrint('Usage: print --urls --[category] [N]  (category optional)', 'var(--amber)');
+      return;
+    }
+    let catArg = '';
+    let nArg = 0;
+    for (const a of args.slice(1)) {
+      if (a.startsWith('--')) { catArg = a.slice(2); }
+      else if (/^\d+$/.test(a)) { nArg = parseInt(a); }
+    }
+    try {
+      const params = new URLSearchParams();
+      if (catArg) params.set('category', catArg);
+      if (nArg > 0) params.set('n', String(nArg));
+      const d = await apiFetch('/api/terminal/print-urls?' + params);
+      if (!d.results.length) { termPrint('No results.', 'var(--dim)'); return; }
+      termDivider();
+      const label = catArg ? `[${catArg}]` : '[all]';
+      termPrint(`<span style="color:var(--green-bright)">  URLS ${label}  —  ${d.results.length} result(s)</span>`);
+      termDivider();
+      const hdr = 'HOST'.padEnd(46) + 'UPTIME'.padEnd(8) + 'RISK'.padEnd(10) + 'SCORE'.padEnd(7) + 'BL';
+      termPrint(`  <span style="color:var(--dim)">${hdr}</span>`);
+      for (const r of d.results) {
+        const rc = riskColor(r.last_risk_level || 'UNKNOWN');
+        const host = ('http://' + r.host + '/').slice(0, 44).padEnd(46);
+        const up = (r.uptime_pct !== null ? r.uptime_pct.toFixed(1) + '%' : '—').padEnd(8);
+        const rl = (r.last_risk_level || '—').padEnd(10);
+        const rs = String(r.last_risk_score || 0).padEnd(7);
+        const bl = r.blacklisted ? `<span style="color:var(--red)">YES</span>` : '<span style="color:var(--dim)">—</span>';
+        termPrint(`  <span style="color:var(--cyan)">${esc(host)}</span><span style="color:var(--dim)">${up}</span><span style="color:${rc}">${rl}${rs}</span>${bl}`);
+      }
+      termDivider();
+    } catch(e) { termPrint('Error: ' + e.message, 'var(--red)'); }
+
+  } else if (cmd === 'save') {
+    // save --urls --[category] [N] [filename] [/path] [--verbose]
+    if (args[0] !== '--urls') {
+      termPrint('Usage: save --urls [--category] [N] [filename] [/path] [--verbose]', 'var(--amber)');
+      return;
+    }
+    let catArg2 = '';
+    let nArg2 = 0;
+    let verboseArg = false;
+    let filenameArg = '';
+    let pathArg = '';
+    for (const a of args.slice(1)) {
+      if (a === '--verbose') { verboseArg = true; }
+      else if (a.startsWith('--')) { catArg2 = a.slice(2); }
+      else if (/^\d+$/.test(a)) { nArg2 = parseInt(a); }
+      else if (a.startsWith('/') || a.includes('\\')) { pathArg = a; }
+      else if (a.endsWith('.txt') || a.endsWith('.csv')) { filenameArg = a; }
+    }
+    termPrint(`Saving URLs${catArg2 ? ' [' + catArg2 + ']' : ''}${verboseArg ? ' verbose' : ''}…`, 'var(--dim)');
+    try {
+      const r = await fetch(API + '/api/terminal/save-urls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category: catArg2, n: nArg2, verbose: verboseArg,
+          filename: filenameArg, path: pathArg,
+        }),
+      });
+      const d = await r.json();
+      if (!d.ok) { termPrint('✗ ' + (d.error || 'Save failed'), 'var(--red)'); return; }
+      termPrint(`✓ Saved ${d.count} URL(s) → <span style="color:var(--cyan)">${esc(d.path)}</span>`, 'var(--green)');
+    } catch(e) { termPrint('Error: ' + e.message, 'var(--red)'); }
 
   } else if (cmd === '') {
     // do nothing

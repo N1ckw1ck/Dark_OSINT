@@ -24,7 +24,7 @@ import textwrap
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-import gnupg  # type: ignore[import-untyped] no stub types
+import gnupg # type: ignore[import-untyped] no stub types
 
 # Constants
 BANNER = r'''

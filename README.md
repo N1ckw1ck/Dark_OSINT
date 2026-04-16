@@ -27,7 +27,7 @@
 - Have a recent version of Python installed on your system
 - Have Tor binary installed on your system
 - Have GnuPG (gpg) installed on your system (for pgp signature validation, not strictly necessary)
-- For Erebus: have a VPN / VPS tunnel to anonymous server, connect before searching
+- For Erebus/Mnemosyne: Run in a VM (use Whonix for best security), connect to a VPN before searching/scanning
 ---
 
 #### Pipeline (if desired)
