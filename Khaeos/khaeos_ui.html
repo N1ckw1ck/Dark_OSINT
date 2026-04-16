@@ -1380,11 +1380,15 @@ async function loadCategories() {
       btn.style.justifyContent = 'space-between';
       btn.style.width = '100%';
       const left = document.createElement('span');
-      left.innerHTML = `<span class="cat-dot"></span> ${esc(cat)}<span class="cat-n" id="cat-n-${cat}"></span>`;
+      left.innerHTML = `<span class="cat-dot"></span> ${esc(cat)}`;
       left.onclick = () => setCategoryFilter(cat);
       left.style.flex = '1';
       left.style.cursor = 'pointer';
       btn.appendChild(left);
+      const countSpan = document.createElement('span');
+      countSpan.className = 'cat-n';
+      countSpan.id = `cat-n-${cat}`;
+      btn.appendChild(countSpan);
       if (isCustom) {
         const del = document.createElement('span');
         del.textContent = '×';
