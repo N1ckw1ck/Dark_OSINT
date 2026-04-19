@@ -27,7 +27,7 @@
 - Have a recent version of Python installed on your system
 - Have Tor binary installed on your system
 - Have GnuPG (gpg) installed on your system (for pgp signature validation, not strictly necessary)
-- For Erebus/Mnemosyne: Run in a VM (use Whonix for best security), connect to a VPN before searching/scanning
+- For Erebus/Mnemosyne: Run in a VM (use Whonix for best security) or VPS, connect to a VPN before searching/scanning
 ---
 
 #### Pipeline (if desired)
@@ -270,7 +270,7 @@ python d_mnemosyne.py --batch <url_list.txt> # Multiple link batch scan
 
 ![d_mnemosyne_batch2](assets/d_mnemosyne_batch2.png)
 > Some services will show unreachable, blacklisted addresses highlighted. 
-> For reference this batch scan of 310 URLs took around 45 minutes
+> For reference this batch scan of 310 URLs took around 1 hour
 
 ###### Groups output by blacklist status, reachability, deanonymization risk
 

@@ -39,8 +39,8 @@ Usage:
   python d_erebus.py [--pages N] [--debug] [--no-save]
 
   --pages <N>    Pages to fetch per index (1-10, default 1) e.g. python d_erebus.py --pages 5
-  --save-j     Save results to JSON
-  --save-h     Save full results to HTML
+  --save-j     Save results to JSON, skips HTML prompt
+  --save-h     Save full results to HTML, skips JSON prompt
   --no-save    Skip all save prompts
   --debug      Show verbose error output
 
@@ -1083,10 +1083,12 @@ def parse_args() -> tuple[int, bool, bool, bool]:
     '''Returns (pages, debug, save_json, save_html).'''
     pages = DEFAULT_PAGES
     debug = '--debug' in sys.argv
-    save_json = '--no-save' not in sys.argv and '--save-j' in sys.argv or (
-        '--no-save' not in sys.argv and '--save-h' not in sys.argv and '--save-j' not in sys.argv
-    ) # eh
-    save_html = '--no-save' not in sys.argv
+    no_save = '--no-save' in sys.argv
+    explicit_j = '--save-j' in sys.argv
+    explicit_h = '--save-h' in sys.argv
+    neither = not explicit_j and not explicit_h
+    save_json = not no_save and (explicit_j or neither)
+    save_html = not no_save and (explicit_h or neither)
 
     if '--pages' in sys.argv:
         idx = sys.argv.index('--pages')
