@@ -10,8 +10,9 @@ Checks:
   • String fields are within sane length bounds
   • No unexpected top-level keys
   • Per-report field whitelist — any unknown keys are flagged
-  • String content scan — flags suspicious patterns (base64 blobs,
-    shell metacharacters in unexpected fields, binary-looking content)
+  • String content scan — flags suspicious patterns (
+    shell metacharacters in unexpected fields, binary-looking content
+    )
 
 If validation passes, copies the file to the outbox.
 If validation fails, the file is quarantined and NOT copied.
@@ -87,8 +88,6 @@ MAX_TARGET_LENGTH = 200
 SUSPICIOUS_PATTERNS: list[tuple[str, str]] = [
     # Shell injection attempts in string values
     (r';\s*(rm|wget|curl|bash|sh|python|nc|ncat|mkfifo)\s', 'shell command injection'),
-    # Suspiciously long base64 — could be embedded payload
-    (r'[A-Za-z0-9+/]{200,}={0,2}', 'long base64 blob'),
     # Null bytes
     (r'\x00', 'null byte'),
     # Python/JS eval patterns
@@ -108,6 +107,11 @@ class ValidationError(Exception):
 def check_string(value: str, field_name: str) -> list[str]:
     '''Scan a string value for suspicious content. Returns list of warnings.'''
     warnings: list[str] = []
+    
+    if any(skip in field_name.lower() for skip in ['header', 'cookie', 'set_cookie', 'authorization']):
+        if len(value) > MAX_STRING_LENGTH:
+            return [f'{field_name}: string exceeds {MAX_STRING_LENGTH} chars ({len(value)})']
+        return []
 
     if len(value) > MAX_STRING_LENGTH:
         warnings.append(f'{field_name}: string exceeds {MAX_STRING_LENGTH} chars ({len(value)})')

@@ -177,8 +177,7 @@ def run_pipeline(query: str, opts: dict[str, object], query_n: int, total_querie
     erebus_cmd = [
         sys.executable, str(HERE / 'd_erebus.py'),
         '--pages', str(pages),
-        '--save-j',
-        '--no-save' # suppress HTML prompt; use --save-h separately if wanted
+        '--save-j'
     ]
     # Erebus uses input() so pipe it
     log(f'Running Erebus (pages={pages})…', C)

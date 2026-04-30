@@ -1,29 +1,31 @@
 #!/bin/bash
-# vps_setup.sh — Vultr Debian 12 hardening + dark web OSINT suite setup
-# Run as root on a fresh Debian 12 instance.
-# Usage: bash vps_setup.sh <your_home_ip> <sftp_username>
-# Example: bash vps_setup.sh 203.0.113.42 user1
+# Run as root after fresh Debian 12 install
+# HOME_IP is the public ip that you want to be able to connect to the VPS from
+#
+# Usage: bash vps_setup.sh <your_home_ip>
+# Example: bash vps_setup.sh 203.0.113.42
+#
+# A different sftp username can be specified with bash vps_setup.sh <your_home_ip> <your_sftp_username>
+# However this might cause issues/confusion down the line, simpler to accept the default "osint" username
 
 set -euo pipefail
 
-# Args
 HOME_IP="${1:-}"
 SFTP_USER="${2:-osint}"
 
 if [[ -z "$HOME_IP" ]]; then
-    echo "[ERROR] Usage: bash vps_setup.sh <your_home_ip> <sftp_username>"
+    echo "[ERROR] | Usage: bash vps_setup2.sh <your_home_ip> <sftp_username>"
     exit 1
 fi
 
 echo ""
 echo "════════════════════════════════════════════════════════════"
-echo "  VPS Setup — Debian 12 Hardening + OSINT Suite"
+echo "  VPS Setup — Debian 12 Hardening + Dark Osint Suite"
 echo "  Home IP  : $HOME_IP"
 echo "  SFTP user: $SFTP_USER"
 echo "════════════════════════════════════════════════════════════"
 echo ""
 
-# System update
 echo "[1/9] System update..."
 apt update -qq && apt upgrade -y -qq
 apt install -y -qq \
@@ -33,49 +35,54 @@ apt install -y -qq \
     logwatch auditd libpam-pwquality \
     openssh-server rsyslog
 
-# Create SFTP-only user
 echo "[2/9] Creating SFTP user: $SFTP_USER..."
+# Create SFTP only user
 if ! id "$SFTP_USER" &>/dev/null; then
     useradd -m -s /usr/sbin/nologin "$SFTP_USER"
 fi
 
 # Create output directory owned by the SFTP user
 mkdir -p "/home/$SFTP_USER/outbox"
+# Ensure home directory is owned by root
+chown root:root "/home/$SFTP_USER"
+chmod 755 "/home/$SFTP_USER"
 chown "$SFTP_USER:$SFTP_USER" "/home/$SFTP_USER/outbox"
 chmod 750 "/home/$SFTP_USER/outbox"
 
-# SFTP user authorized_keys — you will add your public key here after script
+# SFTP user authorized_keys — add your public key here after running the script
 mkdir -p "/home/$SFTP_USER/.ssh"
 chmod 700 "/home/$SFTP_USER/.ssh"
 touch "/home/$SFTP_USER/.ssh/authorized_keys"
 chmod 600 "/home/$SFTP_USER/.ssh/authorized_keys"
 chown -R "$SFTP_USER:$SFTP_USER" "/home/$SFTP_USER/.ssh"
 
-# Create OSINT working user (no login shell, runs tools via cron)
-echo "[3/9] Creating osint working user..."
+
+
+echo "[3/9] Creating osintd working user..."
+# Create osintd working user (no login shell, runs tools via cron)
 if ! id "osintd" &>/dev/null; then
     useradd -m -s /bin/bash osintd
 fi
 mkdir -p /home/osintd/dark_osint
 mkdir -p /home/osintd/dark_osint/output
+mkdir -p /home/osintd/dark_osint/config
 chown -R osintd:osintd /home/osintd/dark_osint
 
-# SSH hardening
-echo "[4/9] Hardening SSH..."
+# Enable writing perms to SFTP user outbox
+sudo chown osint:osintd /home/osint/outbox
+sudo chmod 775 /home/osint/outbox
+
+echo "[4/9] Configuring SSH..."
+
 cat > /etc/ssh/sshd_config << 'EOF'
 # Hardened sshd_config
-Port 22
-Protocol 2
 HostKey /etc/ssh/ssh_host_ed25519_key
 HostKey /etc/ssh/ssh_host_rsa_key
 
-# Auth — keys only, no passwords
+# Auth — public keys only
 PasswordAuthentication no
 PubkeyAuthentication yes
 AuthorizedKeysFile .ssh/authorized_keys
-PermitRootLogin no
-PermitEmptyPasswords no
-ChallengeResponseAuthentication no
 UsePAM yes
 
 # Limits
@@ -93,8 +100,7 @@ PermitTunnel no
 ClientAliveInterval 300
 ClientAliveCountMax 2
 
-# SFTP chroot config
-# The SFTP user is jailed to their home directory
+# SFTP chroot config, SFTP user is jailed to their home directory
 Subsystem sftp internal-sftp -l INFO
 
 Match User SFTP_USER_PLACEHOLDER
@@ -108,23 +114,23 @@ EOF
 # Substitute the actual SFTP username
 sed -i "s/SFTP_USER_PLACEHOLDER/$SFTP_USER/g" /etc/ssh/sshd_config
 
-# Firewall
-echo "[5/9] Configuring firewall..."
+# Check for misconfig
+sshd -t -f /etc/ssh/sshd_config || { echo "[ERROR] sshd_config failed validation, manually check the file with nano /etc/ssh/sshd_config"; exit 1; }
+
+echo "[6/9] Configuring firewall..."
 ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
 
-# SSH only from your home IP
+# SSH only from your home IP, add other IPs you want to be able to access the VPS via SSH
 ufw allow from "$HOME_IP" to any port 22 proto tcp comment "SSH from home"
-
-# Allow Tor outbound (it uses random ports, outgoing allow handles this)
-# No inbound ports needed for this setup
 
 ufw --force enable
 ufw status verbose
 
-# fail2ban
-echo "[6/9] Configuring fail2ban..."
+# Fail2ban to protect the port (rate limit by IP)
+echo "[7/9] Configuring fail2ban..."
+
 cat > /etc/fail2ban/jail.local << 'EOF'
 [DEFAULT]
 bantime  = 3600
@@ -144,8 +150,7 @@ EOF
 systemctl enable fail2ban
 systemctl restart fail2ban
 
-# Automatic security updates
-echo "[7/9] Enabling unattended security upgrades..."
+echo "[7/9] Enabling unattended security updates...]"
 cat > /etc/apt/apt.conf.d/50unattended-upgrades << 'EOF'
 Unattended-Upgrade::Allowed-Origins {
     "${distro_id}:${distro_codename}-security";
@@ -161,14 +166,15 @@ APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 EOF
 
-# Python deps (system-level for osintd user)
-echo "[8/9] Installing Python dependencies..."
-pip3 install --break-system-packages \
+echo "[8/9] Setting up Python environment and installing dependencies..."
+python3 -m venv /home/osintd/venv
+chown -R osintd:osintd /home/osintd/venv
+/home/osintd/venv/bin/pip install \
     "requests[socks]" stem beautifulsoup4 rich python-gnupg \
     fastapi uvicorn python-multipart
 
-# auditd rules — watch the OSINT output directory for tampering
 echo "[9/9] Configuring auditd..."
+
 cat > /etc/audit/rules.d/osint.rules << 'EOF'
 # Watch for writes/attribute changes in the SFTP outbox
 -w /home/SFTP_PLACEHOLDER/outbox -p wa -k sftp_outbox
@@ -183,13 +189,13 @@ EOF
 sed -i "s/SFTP_PLACEHOLDER/$SFTP_USER/g" /etc/audit/rules.d/osint.rules
 service auditd restart
 
-# Tor config
-# Tor runs as a system service on 9050
-# stem will detect this and use it rather than launching its own process
+
+# Startups
+# Tor runs as a system service on 9050, stem will detect this and use it rather than launching its own process
 systemctl enable tor
 systemctl start tor
 
-# Restart SSH (safe — existing session stays open)
+# Restart SSH (existing session stays open)
 systemctl restart sshd
 
 echo ""
