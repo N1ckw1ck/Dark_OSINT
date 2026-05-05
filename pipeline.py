@@ -240,7 +240,9 @@ def run_pipeline(query: str, opts: dict[str, object], query_n: int, total_querie
         '--save',
     ]
 
-    rc = run(mnem_cmd, dry_run=dry_run)
+    output_dir = HERE / 'output'
+    output_dir.mkdir(exist_ok=True)
+    rc = subprocess.run(mnem_cmd, cwd=str(output_dir)).returncode
     if rc not in (0, None):
         log(f'Mnemosyne exited with code {rc}.', Y)
         # Non-fatal — partial results may still have been written
@@ -248,7 +250,7 @@ def run_pipeline(query: str, opts: dict[str, object], query_n: int, total_querie
     if dry_run:
         mnem_json = HERE / f'Mnemosyne_batch_DRYRUN.json'
     else:
-        mnem_json = find_latest(str(HERE / 'Mnemosyne_batch_*.json'))
+        mnem_json = find_latest(str(HERE / 'output' / 'Mnemosyne_batch_*.json'))
         if not mnem_json:
             log('Could not find Mnemosyne batch JSON — skipping Khaeos ingest.', Y)
             return True
