@@ -18,7 +18,7 @@ Usage:
 Options:
   --vps-ip <ip>     VPS IP (or set VPS_IP env var)
   --vps-user <user> SSH username (default: root)
-  --key <path>      SSH private key (default: ~/.ssh/vultr_khaeos)
+  --key <path>      SSH private key (default: ~/.ssh/vps_dark_suite)
   --show            Print current queries on VPS
   --set <q> [q...]  Replace all queries with these
   --add <q> [q...]  Append queries to existing list
@@ -77,7 +77,7 @@ def parse_args() -> dict[str, object]:
     opts: dict[str, object] = {
         'vps_ip':   os.environ.get('VPS_IP', ''),
         'vps_user': 'root',
-        'key':      str(Path.home() / '.ssh' / 'vultr_khaeos'),
+        'key':      str(Path.home() / '.ssh' / 'vps_dark_suite'),
         'action':   None,
         'queries':  [],
         'file':     None,

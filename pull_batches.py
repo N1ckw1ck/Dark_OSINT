@@ -12,7 +12,7 @@ Usage:
 
   --vps-ip <ip>       VPS IP address (or set VPS_IP env var)
   --vps-user <user>   SFTP username (default: osint)
-  --key <path>        Path to SSH private key (default: ~/.ssh/vultr_khaeos)
+  --key <path>        Path to SSH private key (default: ~/.ssh/vps_dark_suite)
   --remote-dir <path> Remote outbox directory (default: /outbox)
   --local-dir <path>  Local download directory (default: ~/khaeos_input)
   --khaeos-db <path>  Path to khaeos.db (default: auto-detect)
@@ -74,7 +74,7 @@ def parse_args() -> dict[str, object]:
     opts: dict[str, object] = {
         'vps_ip': os.environ.get('VPS_IP', ''),
         'vps_user': 'osint',
-        'key': str(Path.home() / '.ssh' / 'vultr_khaeos'),
+        'key': str(Path.home() / '.ssh' / 'vps_dark_suite'),
         'remote_dir': '/outbox',
         'local_dir': str(Path.home() / 'khaeos_input'),
         'khaeos_db': None,

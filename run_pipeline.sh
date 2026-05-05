@@ -34,7 +34,7 @@ if [ ${#QUERIES[@]} -eq 0 ]; then
     exit 1
 fi
 
-echo "Running $(date) - ${QUERIES[@]} queries from $(basename $QUERY_FILE)"
+echo "Running $(date) - ${QUERIES[*]} queries from $(basename $QUERY_FILE)"
 "$PYTHON" pipeline.py "${QUERIES[@]}" --pages 10 --no-khaeos
 
 # Change head for how many lines are in each query file
