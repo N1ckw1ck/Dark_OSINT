@@ -5,6 +5,7 @@
 
 ## Table of Contents
 
+- [Repository Structure](#repository-structure)
 - [Setup](#setup)
 - [Erebus](#erebus-dark-web-search)
 - [Hemera](#hemera-url-extractor)
@@ -21,6 +22,63 @@
 ###### Please assume all requests made are traceable back to you, unless you have taken stringent OPSEC measures (doubtful)
 ###### Please note that the author (I) does (do) **not** assume liability for any misuse.
 ---
+## Repository Structure
+---
+
+```
+DARK_OSINT/
+├── d_erebus.py                      — dark web search aggregator, standalone or pipeline
+├── d_hemera.py                      — extract a clean .onion URL list from Erebus JSON output
+├── d_mnemosyne.py                   — pre-visit .onion safety scanner, standalone or pipeline
+├── pgp_verify.py                    — verify PGP signatures/canaries, fully standalone
+│
+├── Khaeos/                          # the persistent index + web UI, runs on your own machine
+│   ├── d_khaeos.py                  — ingest Mnemosyne output, serve the searchable index UI
+│   ├── khaeos_ui.html               — the web UI itself, served by d_khaeos.py
+│   └── khaeos-mass-batch-ingest.sh  — example bulk-ingest helper; edit the paths/date
+│                                     range in it before using, not a polished CLI tool
+│
+├── Pipeline/                        # chain Erebus → Hemera → Mnemosyne (→ Khaeos) automatically
+│   ├── VPS_Files/                   # meant to be deployed to and run unattended on a VPS
+│   │   ├── pipeline.py              — chain all three tools for one or more queries
+│   │   ├── run-pipeline.sh          — cron-friendly wrapper (day-specific queries, outbox move)
+│   │   ├── validate_batch.py        — validate a Mnemosyne batch before it reaches the outbox
+│   │   ├── validate-batch-helper.sh — one-off manual re-validate helper, edit before use, not polished
+│   │   ├── vps-setup.sh             — harden a fresh Debian VPS, create the SFTP/working users and directories
+│   │   ├── config/
+│   │   │   ├── queries.txt          — fallback query list
+│   │   │   └── queries_<day>.txt    — optional day-specific override, e.g. queries_monday.txt
+│   │   └── output/                  # created at runtime, not committed
+│   │       ├── discovery_queue.txt  — created with --aggressive flag: links found, queued for the *next* run
+│   │       ├── erebus/              # Erebus outputs: Erebus_<query>_<timestamp>.json
+│   │       ├── hemera/              # Hemera outputs: erebus_urls_<query>_<timestamp>.txt
+│   │       └── mnemosyne/           # Mnemosyne outputs: Mnemosyne_batch_<timestamp>.json
+│   │           └── quarantine/      # batches that failed validate_batch.py
+│   └── Local_Machine_Files/         # run on your own machine, talk to the VPS over SSH/SFTP
+│       ├── push_queries.py          — manage the VPS's query files over SSH, no manual login needed
+│       ├── pull_batches.py          — pull validated batches from the VPS outbox over SFTP, verify + ingest
+│       └── pull-khaeos-batches.sh   — thin cron/alias wrapper around pull_batches.py
+│
+├── requirements.txt
+└── README.md
+```
+
+Erebus, Hemera, and Mnemosyne are each individually standalone — running
+them directly writes their output into whatever directory you run them
+from. The `output/erebus/` `output/hemera/` `output/mnemosyne/`
+separation only happens when they're driven through `pipeline.py`, which
+sets each stage's working directory explicitly so nothing ends up loose
+next to the scripts.
+
+**Why the automation lives in `Pipeline/VPS_Files/` specifically**: Erebus
+and Mnemosyne make sustained, repeated Tor requests, which is exactly the 
+kind of long-running, unattended workload you don't want tying up your own 
+machine or repeatedly exposing your home connection to Tor entry guards over 
+time. Running the pipeline by hand once in a while from your own machine is 
+fine; running it on a schedule is what a cheap VPS is for. `pipeline.py` 
+and `run-pipeline.sh` are written with that deployment in mind.
+
+---
 ## Setup
 ---
 #### Many Assumptions are made
@@ -34,18 +92,51 @@
 
 ##### Erebus → Hemera → Mnemosyne → Khaeos
 ##### Example flow:
+###### Manual, step by step:
 
 ```bash
 python d_erebus.py --pages 5 --save-j
 python d_hemera.py Erebus_<query>_<timestamp>.json
 python d_mnemosyne.py --batch erebus_urls_<query>_<timestamp>.txt --save
-python d_khaeos.py --ingest Mnemosyne_batch_.json --serve
+python Khaeos/d_khaeos.py --ingest Mnemosyne_batch_.json --serve
 ```
 1. Erebus scrapes the dark net. It can certainly be used as a stand-alone tool.
 2. Hemera ingests the JSON output of Erebus, and outputs a clean .txt list of the URLs found.
 3. Mnemosyne conducts a pre-visit security analysis of .onion addresses it is fed. It is a standalone tool.
 4. Mnemosyne can also be ran in batch mode with the .txt output of Hemera, producing a group summary.
 5. Khaeos ingests single-scan and batch Mnemosyne JSON files, building a custom intelligence index.
+
+###### Automated, one command per query (`Pipeline/VPS_Files/pipeline.py`):
+
+```bash
+cd Pipeline/VPS_Files
+python pipeline.py "ransomware"
+python pipeline.py "forums" "leaked credentials" --pages 5
+python pipeline.py "malware" --aggressive     # optionally queue discovered links for a future run
+python pipeline.py "markets" --no-khaeos --dry-run
+```
+
+Chain all three tools automatically, writing each stage's output into its
+own subfolder under `output/` (see [Repository Structure](#repository-structure))
+instead of leaving files loose. `--aggressive` makes Mnemosyne pull outbound
+`.onion` links off every page it scans and append newly-discovered ones to
+`output/discovery_queue.txt`. Nothing extra is scanned in that same run,
+it's just queued for later, so a single link-heavy page can't blow up how
+long a run takes. `pipeline.py` finds `d_erebus.py`/`d_hemera.py`/`d_mnemosyne.py`
+at the repo root and `d_khaeos.py` under `Khaeos/` automatically, it
+doesn't need to be run from a flattened directory, this works straight
+out of a clone.
+
+###### Unattended on a VPS (`run-pipeline.sh` + cron):
+
+`run-pipeline.sh` is the cron-friendly wrapper: it picks a day-specific
+query file if one exists (`config/queries_monday.txt`, falling back to
+`config/queries.txt`), runs `pipeline.py`, consumes whatever's sitting in
+the discovery queue from the *previous* run first, then validates and
+moves every batch the run actually produced into the SFTP outbox via
+`validate_batch.py`. A single query failing (a flaky Tor circuit, an
+index timing out) doesn't stop the rest, everything that did succeed
+still gets validated and moved.
 
 ---
 
@@ -228,6 +319,8 @@ python d_mnemosyne.py
 python d_mnemosyne.py --save # If not passed you will be prompted to save after scan
 python d_mnemosyne.py --debug # Prints more verbose error output
 python d_mnemosyne.py --batch <url_list.txt> # Multiple link batch scan
+python d_mnemosyne.py --batch <url_list.txt> --aggressive # also queue discovered links for a future run
+python d_mnemosyne.py --batch <url_list.txt> --aggressive --discovery-out <file> # custom queue path (default: discovery_queue.txt)
 ```
 ---
 **Exit codes** (scriptable) (might not be working properly atm):
@@ -255,6 +348,8 @@ python d_mnemosyne.py --batch <url_list.txt> # Multiple link batch scan
 7. **Risk scoring** — weighted passive score (0–100) based on: clearnet redirects, external resource leaks, clearnet form actions, clearnet script sources, canary verification failures, missing security headers, fingerprinting vectors, and blacklist status.
 
 8. **Batch Scan** - Reads .onion URLs from a text file (one per line), running a sequential scan of all targets over a single Tor session. Output is a grouped summary report. JSON (--save) produces a single consolidated file instead of per-target files. Generate the input file with: python d_erebus.py --save-j
+
+9. **Discovery (--aggressive)** - Extracts outbound `.onion` links found on each scanned page and appends newly-discovered ones (deduplicated) to a discovery queue file — plain text, one URL per line, same format any `--batch` file uses. Nothing extra is scanned during that run; the queue is meant to be fed back in as a `--batch` file on a future run, which keeps a single run's duration predictable instead of letting one link-heavy page balloon it.
 
 ---
 

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-
-# Please Read Below
 '''
 Dark Web Search Aggregator
 

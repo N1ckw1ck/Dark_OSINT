@@ -15,3 +15,7 @@ uvicorn
 python-multipart
 
 # pgp_verify just needs python-gnupg
+
+# Pipeline:
+# pull_batches.py needs
+paramiko

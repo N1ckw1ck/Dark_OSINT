@@ -14,7 +14,7 @@ Usage:
   --vps-user <user>   SFTP username (default: osint)
   --key <path>        Path to SSH private key (default: ~/.ssh/vps_dark_suite)
   --remote-dir <path> Remote outbox directory (default: /outbox)
-  --local-dir <path>  Local download directory (default: ~/khaeos_input)
+  --local-dir <path>  Local download directory (default: ~/batches_for_ingestion)
   --khaeos-db <path>  Path to khaeos.db (default: auto-detect)
   --no-ingest         Download only, skip Khaeos ingest
   --no-delete         Keep files on VPS after successful download (default: delete)
@@ -72,15 +72,15 @@ def sha256_file(path: Path) -> str:
 def parse_args() -> dict[str, object]:
     args = sys.argv[1:]
     opts: dict[str, object] = {
-        'vps_ip': os.environ.get('VPS_IP', ''),
-        'vps_user': 'osint',
-        'key': str(Path.home() / '.ssh' / 'vps_dark_suite'),
+        'vps_ip':     os.environ.get('VPS_IP', ''),
+        'vps_user':   'osint',
+        'key':        str(Path.home() / '.ssh' / 'vps_dark_suite'),
         'remote_dir': '/outbox',
-        'local_dir': str(Path.home() / 'khaeos_input'),
-        'khaeos_db': None,
-        'no_ingest': False,
-        'no_delete': False,
-        'dry_run': False,
+        'local_dir':  str(Path.home() / 'batches_for_ingestion'),
+        'khaeos_db':  None,
+        'no_ingest':  False,
+        'no_delete':  False,
+        'dry_run':    False,
     }
 
     if '-h' in args or '--help' in args:
@@ -96,15 +96,15 @@ def parse_args() -> dict[str, object]:
             if i >= len(args):
                 sys.exit(f'{R}[ERROR] {a} requires an argument.{RST}')
             return args[i]
-        if a == '--vps-ip': opts['vps_ip'] = next_arg()
-        elif a == '--vps-user': opts['vps_user'] = next_arg()
-        elif a == '--key': opts['key'] = next_arg()
+        if a == '--vps-ip':     opts['vps_ip']     = next_arg()
+        elif a == '--vps-user': opts['vps_user']   = next_arg()
+        elif a == '--key':      opts['key']         = next_arg()
         elif a == '--remote-dir': opts['remote_dir'] = next_arg()
-        elif a == '--local-dir': opts['local_dir'] = next_arg()
-        elif a == '--khaeos-db': opts['khaeos_db'] = next_arg()
-        elif a == '--no-ingest': opts['no_ingest'] = True
-        elif a == '--no-delete': opts['no_delete'] = True
-        elif a == '--dry-run': opts['dry_run'] = True
+        elif a == '--local-dir':  opts['local_dir']  = next_arg()
+        elif a == '--khaeos-db':  opts['khaeos_db']  = next_arg()
+        elif a == '--no-ingest':  opts['no_ingest']  = True
+        elif a == '--no-delete':  opts['no_delete']  = True
+        elif a == '--dry-run':    opts['dry_run']    = True
         i += 1
 
     if not opts['vps_ip']:
@@ -156,7 +156,7 @@ def pull_batches(opts: dict[str, object]) -> list[Path]:
         ssh.connect(
             hostname=str(opts['vps_ip']),
             username=str(opts['vps_user']),
-            key_filename=str(opts['key']),
+            key_filename=key_path,
             passphrase=passphrase,
             look_for_keys=False,
             allow_agent=False,
@@ -167,7 +167,7 @@ def pull_batches(opts: dict[str, object]) -> list[Path]:
     except paramiko.ssh_exception.NoValidConnectionsError as e: # type: ignore
         sys.exit(f'\n{R}[ERROR] Could not connect to {vps_ip}: {e}{RST}\n')
     except Exception as e:
-        sys.exit(f'\n{R}[ERROR] SSH connection error: {e}{RST}\n')
+        sys.exit(f'\n{R}[ERROR] SSH connection error: {type(e).__name__}: {e}{RST}\n')
 
     sftp: paramiko.sftp_client.SFTPClient = ssh.open_sftp()
 
@@ -197,7 +197,7 @@ def pull_batches(opts: dict[str, object]) -> list[Path]:
             continue
 
         local_json = local_dir / filename
-        local_sha = local_dir / sha_filename
+        local_sha  = local_dir / sha_filename
 
         # Skip if already downloaded
         if local_json.exists():
@@ -209,7 +209,7 @@ def pull_batches(opts: dict[str, object]) -> list[Path]:
             continue
 
         log(f'Downloading: {filename}…', C)
-        sftp.get(f'{remote_dir}/{filename}', str(local_json))
+        sftp.get(f'{remote_dir}/{filename}',     str(local_json))
         sftp.get(f'{remote_dir}/{sha_filename}', str(local_sha))
 
         # Verify checksum

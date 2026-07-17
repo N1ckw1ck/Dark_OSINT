@@ -46,10 +46,10 @@ B = '\033[1m'
 RST = '\033[0m'
 
 # Schema
-# Expected top-level keys for a batch file
+# Expected top-level keys for a batch file (must match d_mnemosyne.py's save_batch_report)
 BATCH_TOP_LEVEL = {
-    'batch_scan_time', 'total', 'reachable', 'unreachable', 'reports',
-    'scan_duration_s',
+    'batch_scan_time', 'url_source', 'total_targets', 'summary', 'groups',
+    'reports',
 }
 
 # Expected top-level keys for a single-scan file
@@ -82,13 +82,10 @@ MAX_STRING_LENGTH = 100_000 # any single string value
 MAX_REPORTS = 10_000
 MAX_TARGET_LENGTH = 200
 
-# Suspicious string patterns — these should never appear in OSINT data values
-# They would indicate the JSON has been stuffed with something malicious
+# Suspicious string patterns — JSON may have been stuffed with something malicious
 SUSPICIOUS_PATTERNS: list[tuple[str, str]] = [
     # Shell injection attempts in string values
     (r';\s*(rm|wget|curl|bash|sh|python|nc|ncat|mkfifo)\s', 'shell command injection'),
-    # Suspiciously long base64 — could be embedded payload
-    (r'[A-Za-z0-9+/]{200,}={0,2}', 'long base64 blob'),
     # Null bytes
     (r'\x00', 'null byte'),
     # Python/JS eval patterns
@@ -147,7 +144,7 @@ def walk_value(value: Any, path: str, warnings: list[str], depth: int = 0) -> No
                 continue
             walk_value(v, f'{path}.{k}', warnings, depth + 1)
     else:
-        # Unexpected type — json.load should never produce these
+        # Unexpected type — json.load should never produce 
         warnings.append(f'{path}: unexpected type {type(value).__name__}')
 
 

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-
-# Please Read Below
 '''
 d_mnemosyne.py is a .onion Hidden Service Recon & Safety Scanner
 
@@ -27,13 +25,23 @@ Usage:
   python d_mnemosyne.py [--save] [--debug]
   python d_mnemosyne.py --batch <url_list.txt>
 
-    --batch <file>  Batch mode: 
+    --batch <file>  Batch mode:
         Read .onion URLs from a text file (one per line).
         Runs a sequential scan of all targets over a single Tor session.
         More URLs means it will take longer.
         Output is a grouped summary report. JSON (--save) produces a
         single consolidated file instead of per-target files.
         Generate the input file with: python d_erebus.py --save-j
+
+    --aggressive           Extract outbound .onion links found on each scanned
+                           page and append newly-discovered ones (deduplicated)
+                           to a discovery queue file. Nothing is scanned this
+                           run — the queue is plain text, one URL per line,
+                           and can be fed straight back in as a --batch file
+                           on a future run.
+    --discovery-out <file>   Discovery queue path (default: discovery_queue.txt
+                             in the current directory). Only relevant with
+                             --aggressive.
 
 Dependencies:
   pip install requests[socks] stem beautifulsoup4 python-gnupg
@@ -1211,7 +1219,16 @@ def calculate_risk(
 
 
 # Main scan orchestration
-def run_scan(session: requests.Session, target_url: str, *, tor_status: TorStatus, debug: bool, ahmia_blacklist: set[str]) -> OnionReport:
+def run_scan(
+    session: requests.Session,
+    target_url: str,
+    *,
+    tor_status: TorStatus,
+    debug: bool,
+    ahmia_blacklist: set[str],
+    aggressive: bool = False,
+    discovered: set[str] | None = None,
+) -> OnionReport:
     base_url = target_url.rstrip('/')
     scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -1287,6 +1304,9 @@ def run_scan(session: requests.Session, target_url: str, *, tor_status: TorStatu
 
         print(f'{DIM}[9/9] Fingerprinting technology stack...{RESET}')
         tech = fingerprint_tech(soup, headers_result)
+
+        if aggressive and discovered is not None:
+            discovered.update(extract_onion_links(soup, base_url))
     else:
         print(f'  {Y}HTML parsing skipped — root page unavailable.{RESET}')
 
@@ -1309,6 +1329,59 @@ def run_scan(session: requests.Session, target_url: str, *, tor_status: TorStatu
         page_title=page_title,
         raw_html_length=raw_html_length,
     )
+
+
+# --aggressive: outbound link discovery
+ONION_HOST_RE = re.compile(r'^[a-z2-7]{16,56}\.onion$')
+
+
+def extract_onion_links(soup: BeautifulSoup, base_url: str) -> set[str]:
+    '''Pull outbound .onion links referenced on a scanned page (--aggressive mode only).'''
+    found: set[str] = set()
+    base_host = urlparse(base_url).netloc.lower()
+    for a in soup.find_all('a', href=True):
+        href_attr = a.get('href')
+        if not isinstance(href_attr, str):
+            continue  # multi-valued attrs (rare/malformed href) come back as a list
+        href = href_attr.strip()
+        if not href or href.startswith(('#', 'javascript:', 'mailto:')):
+            continue
+        try:
+            absolute = urljoin(base_url + '/', href)
+        except ValueError:
+            continue
+        parsed = urlparse(absolute)
+        host = parsed.netloc.lower()
+        if not host or host == base_host or parsed.scheme not in ('http', 'https'):
+            continue
+        if not ONION_HOST_RE.match(host.split(':')[0]):
+            continue
+        found.add(f'{parsed.scheme}://{host}/')
+    return found
+
+
+def merge_discovery_queue(path: str, new_links: set[str]) -> int:
+    '''
+    Append newly discovered .onion links to the discovery queue file, deduplicated
+    against whatever is already queued. Returns the count of newly added links.
+    The queue file is plain text (one URL per line) for --batch to read.
+    '''
+    from pathlib import Path as _Path
+    qpath = _Path(path)
+    existing: set[str] = set()
+    if qpath.exists():
+        for line in qpath.read_text(encoding='utf-8').splitlines():
+            line = line.strip()
+            if line and not line.startswith('#'):
+                existing.add(line)
+
+    added = new_links - existing
+    if not added:
+        return 0
+
+    qpath.parent.mkdir(parents=True, exist_ok=True)
+    qpath.write_text('\n'.join(sorted(existing | added)) + '\n', encoding='utf-8')
+    return len(added)
 
 
 # Print report sections
@@ -1784,7 +1857,14 @@ def print_batch_summary(reports: list[OnionReport]) -> None:
     print(f'\n{DIVIDER}\n')
 
 
-def run_batch(url_file: str, *, debug: bool, save: bool) -> int:
+def run_batch(
+    url_file: str,
+    *,
+    debug: bool,
+    save: bool,
+    aggressive: bool = False,
+    discovery_out: str = 'discovery_queue.txt',
+) -> int:
     from pathlib import Path as _Path
     p = _Path(url_file)
     if not p.exists():
@@ -1835,6 +1915,7 @@ def run_batch(url_file: str, *, debug: bool, save: bool) -> int:
     print(f'\n{BOLD}Starting batch scan: {len(targets)} target(s){RESET}\n')
 
     reports: list[OnionReport] = []
+    discovered: set[str] = set()
 
     try:
         for i, target_url in enumerate(targets, 1):
@@ -1851,6 +1932,8 @@ def run_batch(url_file: str, *, debug: bool, save: bool) -> int:
                 tor_status=tor_status,
                 debug=debug,
                 ahmia_blacklist=ahmia_blacklist,
+                aggressive=aggressive,
+                discovered=discovered,
             )
             reports.append(report)
 
@@ -1881,6 +1964,13 @@ def run_batch(url_file: str, *, debug: bool, save: bool) -> int:
 
     print_batch_summary(reports)
 
+    if aggressive:
+        discovered -= set(targets)
+        if discovered:
+            added = merge_discovery_queue(discovery_out, discovered)
+            if added:
+                print(f'{G}  Discovery queue: +{added} new .onion link(s) → {discovery_out}{RESET}\n')
+
     if not save:
         save_choice = input(f'{C}> Save batch report to JSON? [y/N]: {RESET}').strip().lower()
         if save_choice == 'y':
@@ -1904,6 +1994,15 @@ def run_batch(url_file: str, *, debug: bool, save: bool) -> int:
 def main() -> int:
     debug = '--debug' in sys.argv
     save = '--save' in sys.argv
+    aggressive = '--aggressive' in sys.argv
+    discovery_out = 'discovery_queue.txt'
+    if '--discovery-out' in sys.argv:
+        idx = sys.argv.index('--discovery-out')
+        try:
+            discovery_out = sys.argv[idx + 1]
+        except IndexError:
+            sys.exit(f'\n{R}[ERROR] --discovery-out requires a file path argument.{RESET}\n')
+
     if '--batch' in sys.argv:
         idx = sys.argv.index('--batch')
         try:
@@ -1911,7 +2010,7 @@ def main() -> int:
         except IndexError:
             sys.exit(f'\n{R}[ERROR] --batch requires a file path argument.{RESET}\n'
                      f'        Usage: python d_mnemosyne.py --batch <url_list.txt>\n')
-        return run_batch(batch_file, debug=debug, save=save)
+        return run_batch(batch_file, debug=debug, save=save, aggressive=aggressive, discovery_out=discovery_out)
 
     print(BANNER)
     print('Pre-visit .onion safety scanner. Fetches only raw HTTP/HTML over Tor.')
@@ -1965,8 +2064,12 @@ def main() -> int:
     print(f'\n{BOLD}Scanning: {C}{target_url}{RESET}')
     print()
 
+    discovered: set[str] = set()
     try:
-        report = run_scan(session, target_url, tor_status=tor_status, debug=debug, ahmia_blacklist=ahmia_blacklist)
+        report = run_scan(
+            session, target_url, tor_status=tor_status, debug=debug, ahmia_blacklist=ahmia_blacklist,
+            aggressive=aggressive, discovered=discovered,
+        )
     finally:
         if tor_process is not None:
             print(f'\n{DIM}Shutting down managed Tor process...{RESET}')
@@ -1978,6 +2081,11 @@ def main() -> int:
                 print(f'  {Y}You may need to kill it manually.{RESET}')
 
     print_full_report(report)
+
+    if aggressive and discovered:
+        added = merge_discovery_queue(discovery_out, discovered)
+        if added:
+            print(f'{G}  Discovery queue: +{added} new .onion link(s) → {discovery_out}{RESET}\n')
 
     if not save:
         save_choice = input(f'{C}> Save report to current directory? [y/N]: {RESET}').strip().lower()
