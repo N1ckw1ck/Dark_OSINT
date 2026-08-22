@@ -2,10 +2,11 @@
 # Run as root after fresh Debian 12 install
 # HOME_IP is the public ip that you want to be able to connect to the VPS from
 #
-# Usage: bash vps-setup.sh <your_home_ip> <sftp_username>
-# Example: bash vps-setup.sh 203.0.113.42 osint
+# Usage: bash vps-setup.sh <your_home_ip>
+# Example: bash vps-setup.sh 203.0.113.42
 #
-# A different sftp username can be specified with bash vps-setup.sh <your_home_ip> <your_sftp_username>
+# A different sftp username can be specified with 
+#   bash vps-setup.sh <your_home_ip> <your_sftp_username>
 # However this might cause issues/confusion down the line, simpler to accept the default "osint" username
 
 set -euo pipefail
@@ -79,7 +80,7 @@ HostKey /etc/ssh/ssh_host_rsa_key
 PasswordAuthentication no
 PubkeyAuthentication yes
 AuthorizedKeysFile .ssh/authorized_keys
-PermitRootLogin no
+PermitRootLogin prohibit-password
 PermitEmptyPasswords no
 ChallengeResponseAuthentication no
 UsePAM yes

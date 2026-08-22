@@ -74,7 +74,7 @@ next to the scripts.
 and Mnemosyne make sustained, repeated Tor requests, which is exactly the 
 kind of long-running, unattended workload you don't want tying up your own 
 machine or repeatedly exposing your home connection to Tor entry guards over 
-time. Running the pipeline by hand once in a while from your own machine is 
+time. Running the pipeline manually once in a while from your own machine is 
 fine; running it on a schedule is what a cheap VPS is for. `pipeline.py` 
 and `run-pipeline.sh` are written with that deployment in mind.
 
@@ -84,7 +84,7 @@ and `run-pipeline.sh` are written with that deployment in mind.
 #### Many Assumptions are made
 - Have a recent version of Python installed on your system
 - Have Tor binary installed on your system
-- Have GnuPG (gpg) installed on your system (for pgp signature validation, not strictly necessary)
+- Have GnuPG (gpg) installed on your system (for pgp signature validation, not strictly necessary but recommended)
 - For Erebus/Mnemosyne: Run in a VM (use Whonix for best security) or VPS, connect to a VPN before searching/scanning
 ---
 
@@ -137,6 +137,9 @@ moves every batch the run actually produced into the SFTP outbox via
 `validate_batch.py`. A single query failing (a flaky Tor circuit, an
 index timing out) doesn't stop the rest, everything that did succeed
 still gets validated and moved.
+
+See the [Setup Guide](https://datahackshaw.com/khaeos/#setup) for instructions
+to set the program up to run as an automated service on a VPS.
 
 ---
 
