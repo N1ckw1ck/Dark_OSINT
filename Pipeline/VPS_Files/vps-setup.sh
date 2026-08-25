@@ -43,6 +43,10 @@ if ! id "$SFTP_USER" &>/dev/null; then
     useradd -m -s /usr/sbin/nologin "$SFTP_USER"
 fi
 
+# ChrootDirectory needs chroot root owned by root root root
+chown root:root "/home/$SFTP_USER"
+chmod 755 "/home/$SFTP_USER"
+
 # Create output directory owned by the SFTP user
 mkdir -p "/home/$SFTP_USER/outbox"
 chown "$SFTP_USER:$SFTP_USER" "/home/$SFTP_USER/outbox"
@@ -56,7 +60,7 @@ chmod 600 "/home/$SFTP_USER/.ssh/authorized_keys"
 chown -R "$SFTP_USER:$SFTP_USER" "/home/$SFTP_USER/.ssh"
 
 # Create OSINT working user (no login shell, runs tools via cron)
-echo "[3/8] Creating osint working user..."
+echo "[3/8] Creating osint working user, directories, venv..."
 if ! id "osintd" &>/dev/null; then
     useradd -m -s /bin/bash osintd
 fi
@@ -66,6 +70,11 @@ mkdir -p /home/osintd/dark_osint/output/erebus
 mkdir -p /home/osintd/dark_osint/output/hemera
 mkdir -p /home/osintd/dark_osint/output/mnemosyne
 chown -R osintd:osintd /home/osintd/dark_osint
+
+# create venv, install requirements for osintd
+sudo -u osintd python3 -m venv /home/osintd/venv
+sudo -u osintd /home/osintd/venv/bin/pip install --quiet --upgrade pip
+sudo -u osintd /home/osintd/venv/bin/pip install --quiet 'requests[socks]' stem beautifulsoup4 python-gnupg rich
 
 # SSH hardening
 echo "[4/8] Hardening SSH..."
@@ -198,17 +207,31 @@ echo "  Setup complete."
 echo ""
 echo "  NEXT STEPS:"
 echo "  1. Add your SFTP public key:"
-echo "     cat your_key.pub >> /home/$SFTP_USER/.ssh/authorized_keys"
+echo "      cat your_key.pub >> /home/$SFTP_USER/.ssh/authorized_keys"
 echo ""
 echo "  2. SCP your tool files to /home/osintd/dark_osint/"
 echo "     From local: scp -i ~/.ssh/vultr_khaeos d_*.py pipeline.py"
 echo "                     root@VPS_IP:/home/osintd/dark_osint/"
 echo "     Then: chown -R osintd:osintd /home/osintd/dark_osint"
 echo ""
-echo "  3. Set up cron for osintd user (see README)"
+echo "  3. Make pipeline.py executable and set permissions:"
+echo "      chmod +x /home/osintd/dark_osint/run-pipeline.sh"
+echo "      chown osintd:osintd /home/osintd/dark_osint/run-pipeline.sh"
 echo ""
-echo "  4. Test SFTP connection from local machine"
+echo "  4. Set up cron for osintd user:"
+echo "      crontab -u osintd -e"
+echo "      Append: "
+echo "       0 2 * * * /home/osintd/dark_osint/run-pipeline.sh >> /home/osintd/dark_osint/pipeline.log 2&1"
 echo ""
-echo "  5. Open a NEW terminal and test SSH before closing this one"
+echo "  5. Create query files:"
+echo "      nano /home/osintd/dark_osint/config/queries.txt"
+echo "        OR"
+echo "      nano /home/osintd/dark_osint/config/queries_monday.txt"
+echo "      nano /home/osintd/dark_osint/config/..."
+echo ""
+echo "  6. Test SFTP connection from local machine"
+echo ""
+echo "  7. Open a NEW terminal and test SSH before closing this one"
+echo "     SEE README.md, setup guide for more information"
 echo "════════════════════════════════════════════════════════════"
 echo ""

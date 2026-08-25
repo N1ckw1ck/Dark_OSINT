@@ -70,7 +70,7 @@ separation only happens when they're driven through `pipeline.py`, which
 sets each stage's working directory explicitly so nothing ends up loose
 next to the scripts.
 
-**Why the automation lives in `Pipeline/VPS_Files/` specifically**: Erebus
+**Automation lives in `Pipeline/VPS_Files/` specifically**: Erebus
 and Mnemosyne make sustained, repeated Tor requests, which is exactly the 
 kind of long-running, unattended workload you don't want tying up your own 
 machine or repeatedly exposing your home connection to Tor entry guards over 

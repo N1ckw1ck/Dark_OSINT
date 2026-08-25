@@ -14,7 +14,7 @@ Usage:
   --vps-user <user>   SFTP username (default: osint)
   --key <path>        Path to SSH private key (default: ~/.ssh/vps_dark_suite)
   --remote-dir <path> Remote outbox directory (default: /outbox)
-  --local-dir <path>  Local download directory (default: ~/batches_for_ingestion)
+  --local-dir <path>  Local download directory (default: Khaeos/batches_for_ingestion) (In this repo)
   --khaeos-db <path>  Path to khaeos.db (default: auto-detect)
   --no-ingest         Download only, skip Khaeos ingest
   --no-delete         Keep files on VPS after successful download (default: delete)
@@ -51,8 +51,11 @@ B = '\033[1m'
 RST = '\033[0m'
 
 DIVIDER = '─' * 62
-HERE = Path(__file__).parent
 
+HERE = Path(__file__).resolve().parent
+REPO_ROOT = HERE.parent.parent
+DEFAULT_LOCAL_DIR = REPO_ROOT / 'Khaeos' / 'batches_for_ingestion'
+DEFAULT_KHAEOS_SCRIPT = REPO_ROOT / 'Khaeos' / 'd_khaeos.py'
 
 # Helpers
 def log(msg: str, color: str = '') -> None:
@@ -76,7 +79,7 @@ def parse_args() -> dict[str, object]:
         'vps_user':   'osint',
         'key':        str(Path.home() / '.ssh' / 'vps_dark_suite'),
         'remote_dir': '/outbox',
-        'local_dir':  str(Path.home() / 'batches_for_ingestion'),
+        'local_dir':  str(DEFAULT_LOCAL_DIR),
         'khaeos_db':  None,
         'no_ingest':  False,
         'no_delete':  False,
@@ -243,7 +246,7 @@ def pull_batches(opts: dict[str, object]) -> list[Path]:
 
 # Khaeos ingest
 def ingest_files(paths: list[Path], opts: dict[str, object]) -> None:
-    khaeos_script = HERE / 'd_khaeos.py'
+    khaeos_script = DEFAULT_KHAEOS_SCRIPT if DEFAULT_KHAEOS_SCRIPT.exists() else HERE / 'd_khaeos.py'
     if not khaeos_script.exists():
         log(f'Khaeos script not found at {khaeos_script} — skipping ingest', Y)
         return
