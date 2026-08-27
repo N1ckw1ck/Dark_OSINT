@@ -47,10 +47,10 @@ fi
 chown root:root "/home/$SFTP_USER"
 chmod 755 "/home/$SFTP_USER"
 
-# Create output directory owned by the SFTP user
+# Create output directory owned by the SFTP user, writable to by osintd
 mkdir -p "/home/$SFTP_USER/outbox"
 chown "$SFTP_USER:$SFTP_USER" "/home/$SFTP_USER/outbox"
-chmod 750 "/home/$SFTP_USER/outbox"
+chmod 770 "/home/$SFTP_USER/outbox"
 
 # SFTP user authorized_keys — you will add your public key here after script
 mkdir -p "/home/$SFTP_USER/.ssh"
@@ -64,6 +64,10 @@ echo "[3/8] Creating osint working user, directories, venv..."
 if ! id "osintd" &>/dev/null; then
     useradd -m -s /bin/bash osintd
 fi
+
+# let SFTP_USER write to osintd's outbox
+usermod -aG "$SFTP_USER" osintd
+
 mkdir -p /home/osintd/dark_osint
 mkdir -p /home/osintd/dark_osint/config
 mkdir -p /home/osintd/dark_osint/output/erebus

@@ -24,6 +24,7 @@ Exit codes:
   0 — valid, file copied to outbox
   1 — validation failed, file quarantined
   2 — usage/file error
+  4 - validation passed, but write to outbox failed (permissions, disk, etc.)
 '''
 
 from __future__ import annotations
@@ -288,14 +289,20 @@ def main() -> int:
                 print(f'    {Y}! {w}{RST}')
 
         # Move to outbox
-        outbox_dir.mkdir(parents=True, exist_ok=True)
-        dest = outbox_dir / input_file.name
-        shutil.copy2(input_file, dest)
+        try:
+            outbox_dir.mkdir(parents=True, exist_ok=True)
+            dest = outbox_dir / input_file.name
+            shutil.copy2(input_file, dest)
 
-        # Write a sidecar checksum file
-        (outbox_dir / (input_file.name + '.sha256')).write_text(
-            f'{sha256}  {input_file.name}\n', encoding='utf-8'
-        )
+            # Write a sidecar checksum file
+            (outbox_dir / (input_file.name + '.sha256')).write_text(
+                f'{sha256}  {input_file.name}\n', encoding='utf-8'
+            )
+        except OSError as e:
+            print(f'\n{R}[ERROR] Could not write to outbox {outbox_dir}: {e}{RST}')
+            print(f'{R}  Check that this user has write permissions on outbox directory'
+                  f'  (e.g. group membership + mode, not just ownership). {RST}\n')
+            return 4
 
         print(f'\n{G}  → Copied to outbox: {dest}{RST}')
         print(f'{G}  → Checksum written: {dest}.sha256{RST}\n')

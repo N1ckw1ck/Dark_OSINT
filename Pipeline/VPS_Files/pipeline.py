@@ -339,7 +339,11 @@ def main() -> int:
     start = time.time()
 
     for i, query in enumerate(queries, 1):
-        ok = run_pipeline(query, opts, i, len(queries))
+        try:
+            ok = run_pipeline(query, opts, i, len(queries))
+        except Exception as e: # save the loop
+            log(f'Unexpected error on query {query!r}: {type(e).__name__}: {e}', R)
+            ok = False
         results.append((query, ok))
         if len(queries) > 1 and i < len(queries):
             log(f'Waiting 10s before next query…', DIM)
