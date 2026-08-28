@@ -24,6 +24,8 @@ Options:
   --aggressive    Pass --aggressive to Mnemosyne (queues discovered .onion
                    links from each scanned page into output/discovery_queue.txt
                    for a future run — nothing extra is scanned this run)
+  --outbox <path> Validate each query's Mnemosyne batch and copy it to this specified
+                   outbox directory immediately after that query finishes
   --dry-run       Print commands without running them
 
 For authorized research and investigative use only.
@@ -68,10 +70,10 @@ EREBUS_DIR = OUTPUT_DIR / 'erebus'
 HEMERA_DIR = OUTPUT_DIR / 'hemera'
 MNEMOSYNE_DIR = OUTPUT_DIR / 'mnemosyne'
 
-# In this repo, d_erebus.py / d_hemera.py / d_mnemosyne.py live at the repo root and d_khaeos.py lives under Khaeos/, 
-# while this script lives under Pipeline/VPS_Files/ — three levels down. On a deployed VPS, the standard deploy step 
-# copies all of them flat into one directory alongside this script instead (see the "Deploy Tools to VPS" docs). 
+# In this repo, d_erebus.py / d_hemera.py / d_mnemosyne.py live at the repo root and d_khaeos.py lives under Khaeos/, while this script lives under Pipeline/VPS_Files/. 
+# On a deployed VPS, the standard deploy step (SCP) copies all of them flat into one directory alongside this script instead (see the VPS setup docs/notes). 
 # pipeline.py checks next to this script first, then falls back to the repo layout so `python pipeline.py ...` also works straight out of a clone.
+# If all is working as intended this shouldn't practically matter
 REPO_ROOT = HERE.parent.parent
 
 
@@ -80,13 +82,14 @@ def resolve_script(name: str, *extra_candidates: Path) -> Path:
     for candidate in (HERE / name, *extra_candidates, REPO_ROOT / name):
         if candidate.exists():
             return candidate
-    return HERE / name # not found anywhere — keep the clearest path for the error
+    return HERE / name # not found anywhere
 
 
 EREBUS_SCRIPT = resolve_script('d_erebus.py')
 HEMERA_SCRIPT = resolve_script('d_hemera.py')
 MNEMOSYNE_SCRIPT = resolve_script('d_mnemosyne.py')
 KHAEOS_SCRIPT = resolve_script('d_khaeos.py', REPO_ROOT / 'Khaeos' / 'd_khaeos.py')
+VALIDATE_SCRIPT = resolve_script('validate_batch.py')
 
 
 # Helpers
@@ -141,6 +144,7 @@ def parse_args() -> tuple[list[str], dict[str, object]]:
         'full_paths': False,
         'dry_run': False,
         'aggressive': False,
+        'outbox': None,
     }
 
     i = 0
@@ -164,6 +168,12 @@ def parse_args() -> tuple[list[str], dict[str, object]]:
             opts['dry_run'] = True
         elif a == '--aggressive':
             opts['aggressive'] = True
+        elif a == '--outbox':
+            i += 1
+            try:
+                opts['outbox'] = args[i]
+            except IndexError:
+                sys.exit(f'{R}[ERROR] --outbox requires a path.{RST}')
         elif a == '--khaeos-db':
             i += 1
             try:
@@ -194,16 +204,19 @@ def run_pipeline(query: str, opts: dict[str, object], query_n: int, total_querie
     full_paths = bool(opts['full_paths'])
     dry_run = bool(opts['dry_run'])
     aggressive = bool(opts['aggressive'])
+    outbox = opts['outbox']
     khaeos_db = opts['khaeos_db']
 
-    total_steps = 2 + (0 if no_mnem else 1) + (0 if no_khaeos else 1)
+    total_steps = (2 + (0 if no_mnem else 1) + (0 if (no_mnem or not outbox) else 1) + (0 if no_khaeos else 1))
+    step_n = 0
 
     print(f'\n{BOLD}{C}{"═" * 62}{RST}')
     print(f'{BOLD}{C}  Query {query_n}/{total_queries}: {query!r}{RST}')
     print(f'{BOLD}{C}{"═" * 62}{RST}')
 
     # First Erebus — output kept in its own subfolder, not loose next to the scripts
-    log_step(1, total_steps, 'Erebus — dark web search')
+    step_n += 1
+    log_step(step_n, total_steps, 'Erebus — dark web search')
 
     EREBUS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -236,7 +249,8 @@ def run_pipeline(query: str, opts: dict[str, object], query_n: int, total_querie
         log(f'Erebus output: {erebus_json.name}', G)
 
     # Hemera — output kept in its own subfolder too
-    log_step(2, total_steps, 'Hemera — URL extraction')
+    step_n += 1
+    log_step(step_n, total_steps, 'Hemera — URL extraction')
 
     HEMERA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -268,7 +282,8 @@ def run_pipeline(query: str, opts: dict[str, object], query_n: int, total_querie
         return True
 
     # Mnemosyne
-    log_step(3, total_steps, 'Mnemosyne — .onion recon')
+    step_n += 1
+    log_step(step_n, total_steps, 'Mnemosyne — .onion recon')
 
     mnem_cmd = [
         sys.executable, str(MNEMOSYNE_SCRIPT),
@@ -296,12 +311,24 @@ def run_pipeline(query: str, opts: dict[str, object], query_n: int, total_querie
             return True
         log(f'Mnemosyne output: {mnem_json.name}', G)
 
+    if outbox:
+        step_n += 1
+        log_step(step_n, total_steps, 'Validate - copy to outbox')
+        rc = run([sys.executable, str(VALIDATE_SCRIPT), str(mnem_json), '--outbox', str(outbox)], dry_run=dry_run)
+        if rc == 0:
+            log(f'Copied to outbox: {mnem_json.name}', G)
+        else:
+            log(f'Validation failed (exit {rc}) - batch quarantined, skipping Khaeos ingest.', Y)
+            log('Pipeline complete for this query.', G)
+            return True
+
     if no_khaeos:
         log('--no-khaeos set — skipping ingest.', Y)
         return True
 
     # Optional Khaeos ingest
-    log_step(4, total_steps, 'Khaeos — ingest')
+    step_n += 1
+    log_step(step_n, total_steps, 'Khaeos — ingest')
 
     khaeos_cmd = [
         sys.executable, str(KHAEOS_SCRIPT),
