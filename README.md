@@ -21,6 +21,7 @@
 ###### Running executable code that makes requests over the internet is not just words.
 ###### Please assume all requests made are traceable back to you, unless you have taken stringent OPSEC measures (doubtful)
 ###### Please note that the author (I) does (do) **not** assume liability for any misuse.
+> Copyright (C) 2026 N1ckW1ck (See AGPL License)
 ---
 ## Repository Structure
 ---
