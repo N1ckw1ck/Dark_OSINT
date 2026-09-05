@@ -80,6 +80,19 @@ sudo -u osintd python3 -m venv /home/osintd/venv
 sudo -u osintd /home/osintd/venv/bin/pip install --quiet --upgrade pip
 sudo -u osintd /home/osintd/venv/bin/pip install --quiet 'requests[socks]' stem beautifulsoup4 python-gnupg rich
 
+# Log rotate for pipeline.log
+cat > /etc/logrotate.d/dark_osint_pipeline << 'EOF'
+/home/osintd/dark_osint/pipeline.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
+
 # SSH hardening
 echo "[4/8] Hardening SSH..."
 cat > /etc/ssh/sshd_config << 'EOF'
@@ -202,7 +215,7 @@ service auditd restart
 systemctl enable tor
 systemctl start tor
 
-# Restart SSH (safe — existing session stays open)
+# Restart SSH (existing session stays open)
 systemctl restart sshd
 
 echo ""
@@ -210,27 +223,32 @@ echo "════════════════════════�
 echo "  Setup complete."
 echo ""
 echo "  NEXT STEPS:"
-echo "  1. Add your SFTP public key:"
-echo "      cat your_key.pub >> /home/$SFTP_USER/.ssh/authorized_keys"
+echo "  1. Add your SFTP public key"
+echo "      a) Copy from local machine:"
+echo "           cat ~/.ssh/vps_dark_suite.pub"
+echo "      b) Paste directly into VPS:"
+echo "           nano /home/$SFTP_USER/.ssh/authorized_keys"
 echo ""
 echo "  2. SCP your tool files to /home/osintd/dark_osint/"
-echo "     From local: scp -i ~/.ssh/vultr_khaeos d_*.py pipeline.py"
-echo "                     root@VPS_IP:/home/osintd/dark_osint/"
-echo "     Then: chown -R osintd:osintd /home/osintd/dark_osint"
+echo "      a) From local machine:"
+echo "           scp -i ~/.ssh/vps_dark_suite d_*.py Pipeline/VPS_Files/* root@VPS_IP:/home/osintd/dark_osint/"
+echo "      b) Then in VPS:"
+echo "           chown -R osintd:osintd /home/osintd/dark_osint"
 echo ""
-echo "  3. Make pipeline.py executable and set permissions:"
+echo "  3. In VPS, make pipeline.py executable and set permissions:"
 echo "      chmod +x /home/osintd/dark_osint/run-pipeline.sh"
 echo "      chown osintd:osintd /home/osintd/dark_osint/run-pipeline.sh"
 echo ""
 echo "  4. Set up cron for osintd user:"
-echo "      crontab -u osintd -e"
-echo "      Append: "
-echo "       0 2 * * * /home/osintd/dark_osint/run-pipeline.sh >> /home/osintd/dark_osint/pipeline.log 2&1"
+echo "      a) crontab -u osintd -e"
+echo "      b) Append:"
+echo "           0 2 * * * /home/osintd/dark_osint/run-pipeline.sh >> /home/osintd/dark_osint/pipeline.log 2>&1"
 echo ""
 echo "  5. Create query files:"
 echo "      nano /home/osintd/dark_osint/config/queries.txt"
 echo "        OR"
 echo "      nano /home/osintd/dark_osint/config/queries_monday.txt"
+echo "      nano /home/osintd/dark_osint/config/queries_tuesday.txt"
 echo "      nano /home/osintd/dark_osint/config/..."
 echo ""
 echo "  6. Test SFTP connection from local machine"

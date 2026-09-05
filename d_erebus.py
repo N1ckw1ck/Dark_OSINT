@@ -43,7 +43,7 @@ Usage:
   --debug      Show verbose error output
 
 Dependencies:
-  pip install requests[socks] stem beautifulsoup4 rich
+  requests[socks] stem beautifulsoup4 rich (see requirements.txt)
 
 Tor:
   This tool launches a managed Tor process via stem, or uses an existing
@@ -76,32 +76,32 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse, quote_plus
 
-import requests # type: ignore
-from bs4 import BeautifulSoup # type: ignore
+import requests
+from bs4 import BeautifulSoup
 
 try:
     import stem # pyright: ignore[reportMissingTypeStubs]
     import stem.process # type: ignore
     import stem.control # type: ignore
     from stem import Signal # type: ignore
-    STEM_AVAILABLE = True
+    stem_available = True
 except ImportError:
-    STEM_AVAILABLE = False # type: ignore
+    stem_available = False
 
 try:
-    from rich.console import Console # type: ignore
-    from rich.table import Table # type: ignore
-    from rich import box # type: ignore
-    from rich.text import Text # type: ignore
-    from rich.panel import Panel # type: ignore
-    RICH_AVAILABLE = True
+    from rich.console import Console
+    from rich.table import Table
+    from rich import box
+    from rich.text import Text
+    from rich.panel import Panel
+    rich_available = True
 except ImportError:
-    Console = None # type: ignore
-    Table = None # type: ignore
-    box = None # type: ignore
-    Text = None # type: ignore
-    Panel = None # type: ignore
-    RICH_AVAILABLE = False # type: ignore
+    Console = None
+    Table = None
+    box = None
+    Text = None
+    Panel = None
+    rich_available = False
 
 
 # ANSI
@@ -264,7 +264,7 @@ def check_tor_running() -> bool:
         return False
 
 def launch_tor_process(debug: bool = False) -> tuple[Any, TorStatus]:
-    if not STEM_AVAILABLE:
+    if not stem_available:
         sys.exit(
             f'\n{R}[ERROR] stem is not installed. Install with: pip install stem{RESET}\n'
             '        Or start Tor manually and re-run.\n'
@@ -337,7 +337,7 @@ def launch_tor_process(debug: bool = False) -> tuple[Any, TorStatus]:
         sys.exit(f'\n{R}[ERROR] Failed to launch Tor: {e}{RESET}\n')
 
 def rotate_circuit(debug: bool = False) -> bool:
-    if not STEM_AVAILABLE:
+    if not stem_available:
         return False
     try:
         with stem.control.Controller.from_port(port=TOR_CONTROL_PORT) as ctrl: # type: ignore
@@ -1110,11 +1110,11 @@ def main() -> int:
     print(DIVIDER)
     print()
 
-    if not STEM_AVAILABLE:
+    if not stem_available:
         print(f'{R}[ERROR] stem is required. Install with: pip install stem{RESET}\n')
         return 1
 
-    if not RICH_AVAILABLE:
+    if not rich_available:
         print(f'{Y}[WARN] rich not installed — falling back to plain output.{RESET}')
         print(f'{Y}       Install with: pip install rich{RESET}\n')
 
@@ -1189,7 +1189,7 @@ def main() -> int:
     )
 
     # Display
-    if RICH_AVAILABLE:
+    if rich_available:
         display_results_rich(run)
     else:
         display_results_plain(run)
@@ -1199,18 +1199,18 @@ def main() -> int:
         do_json = '--save-j' in sys.argv or input(f'{C}> Save results to JSON? [Y/n]: {RESET}').strip().lower() != 'n'
         if do_json:
             filename = save_results(run)
-            if RICH_AVAILABLE and Console is not None:
+            if rich_available and Console is not None:
                 Console().print(f'[green]  Results saved → {filename}[/]\n')
             else:
                 print(f'{G}  Results saved → {filename}{RESET}\n')
 
     # Save HTML
-    if save_html and RICH_AVAILABLE:
+    if save_html and rich_available:
         do_html = '--save-h' in sys.argv or input(f'{C}> Save full results to HTML? [Y/n]: {RESET}').strip().lower() != 'n'
         if do_html:
             filename = save_results_html(run)
             Console().print(f'[green]  HTML saved → {filename}[/]\n') # type: ignore
-    elif save_html and not RICH_AVAILABLE:
+    elif save_html and not rich_available:
         print(f'{Y}[WARN] rich is required for HTML export. Install with: pip install rich{RESET}\n')
 
     return 0

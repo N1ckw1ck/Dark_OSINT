@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 '''
-d_khaeos.py — Khaeos Dark Web Intelligence Index
+d_khaeos.py - Khaeos Dark Web Intelligence Index
 
 Local FastAPI-backed search index and time-series tracker for .onion sites.
 Consumes JSON output from d_mnemosyne.py (single-scan or batch) and builds
@@ -27,7 +27,7 @@ Usage:
   python d_khaeos.py --db <path>            Use a custom database path (allows external drive)
 
 Dependencies:
-  pip install fastapi uvicorn python-multipart
+  fastapi uvicorn python-multipart (see requirements.txt)
 
 For authorized research and investigative use only.
 '''
@@ -526,7 +526,7 @@ def ingest_file(json_path: Path, db_path: Path) -> tuple[int, int, list[str]]:
 
 # FastAPI app
 def create_app(db_path: Path) -> 'FastAPI':
-    app = FastAPI(title='Khaeos', version='1.0.0', docs_url=None, redoc_url=None) # type: ignore
+    app = FastAPI(title='Khaeos', version='1.4.4', docs_url=None, redoc_url=None) # type: ignore
     app.add_middleware(
         CORSMiddleware, # type: ignore
         allow_origins=['*'],

@@ -11,8 +11,8 @@ Usage:
     python pgp_verify.py [--debug]
 
 Dependencies:
-    pip install python-gnupg
-    gpg must be installed on the system (gpg or gpg2)!!!
+    python-gnupg (see requirements.txt)
+    gpg must be installed on the system (gpg or gpg2)
 '''
 
 from __future__ import annotations

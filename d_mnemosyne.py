@@ -44,7 +44,7 @@ Usage:
                              --aggressive.
 
 Dependencies:
-  pip install requests[socks] stem beautifulsoup4 python-gnupg
+  requests[socks] stem beautifulsoup4 python-gnupg (see requirements.txt)
   Tor binary must be installed (tor or tor-browser-bundle)
   gpg binary required for canary PGP verification
 
@@ -72,8 +72,8 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse, urljoin
 import hashlib
-import requests # type: ignore
-from bs4 import BeautifulSoup # type: ignore
+import requests
+from bs4 import BeautifulSoup
 
 # Optional: stem for managed Tor process
 try:
@@ -81,16 +81,16 @@ try:
     import stem.process # type: ignore
     import stem.control # type: ignore
     from stem import Signal # type: ignore
-    STEM_AVAILABLE = True
+    stem_available = True
 except ImportError:
-    STEM_AVAILABLE = False # type: ignore
+    stem_available = False
 
 # Optional: python-gnupg for canary verification
 try:
     import gnupg # type: ignore
-    GNUPG_AVAILABLE = True
+    gnupg_available = True
 except ImportError:
-    GNUPG_AVAILABLE = False # type: ignore
+    gnupg_available = False
 
 
 # Constants
@@ -376,7 +376,7 @@ def launch_tor_process() -> tuple[Any, TorStatus]:
     Returns (process_handle, TorStatus).
     process_handle is None if we are using an existing daemon.
     '''
-    if not STEM_AVAILABLE:
+    if not stem_available:
         sys.exit(
             f'\n{R}[ERROR] stem is not installed. Install with: pip install stem{RESET}\n'
             f'        Or start Tor manually: tor --SocksPort 9050\n'
@@ -449,7 +449,7 @@ def rotate_circuit() -> bool:
     Request a new Tor circuit via stem control port.
     Returns True if successful. Used between target scans.
     '''
-    if not STEM_AVAILABLE:
+    if not stem_available:
         return False
     try:
         with stem.control.Controller.from_port(port=TOR_CONTROL_PORT) as ctrl: # type: ignore
@@ -734,7 +734,7 @@ def verify_canary(well_known: list[WellKnownFile], *, debug: bool) -> CanaryVeri
     Isolates key import to a temporary keyring — same pattern as pgp_verify.py.
     Returns None if prerequisites are not met.
     '''
-    if not GNUPG_AVAILABLE:
+    if not gnupg_available:
         return None
 
     gpg_binary = shutil.which('gpg') or shutil.which('gpg2')
@@ -1891,9 +1891,9 @@ def run_batch(
     print_divider()
     print()
 
-    if not STEM_AVAILABLE:
+    if not stem_available:
         print(f'{Y}[WARN] stem not installed — Tor must be running manually on port {TOR_SOCKS_PORT}{RESET}\n')
-    if not GNUPG_AVAILABLE:
+    if not gnupg_available:
         print(f'{Y}[WARN] python-gnupg not installed — canary verification disabled{RESET}\n')
     elif not (shutil.which('gpg') or shutil.which('gpg2')):
         print(f'{Y}[WARN] gpg binary not found — canary verification disabled{RESET}\n')
@@ -2019,11 +2019,11 @@ def main() -> int:
     print()
 
     # Dependency checks
-    if not STEM_AVAILABLE:
+    if not stem_available:
         print(f'{Y}[WARN] stem not installed — install with: pip install stem{RESET}')
         print(f'{Y}       Tor must be running manually on port {TOR_SOCKS_PORT}{RESET}\n')
 
-    if not GNUPG_AVAILABLE:
+    if not gnupg_available:
         print(f'{Y}[WARN] python-gnupg not installed — canary verification disabled{RESET}')
         print(f'{Y}       Install with: pip install python-gnupg{RESET}\n')
     elif not (shutil.which('gpg') or shutil.which('gpg2')):

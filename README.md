@@ -1,10 +1,11 @@
-# Dark Web OSINT
+# Dark Web OSINT Suite
 
 ![Hello](assets/O_o.png)
 
 
 ## Table of Contents
 
+- [Description](#description)
 - [Repository Structure](#repository-structure)
 - [Setup](#setup)
 - [Erebus](#erebus-dark-web-search)
@@ -12,16 +13,54 @@
 - [Mnemosyne](#mnemosyne-onion-link-recon)
 - [Khaeos](#khaeos-control-center)
 - [Other Tools](#other-possibly-helpful-tools)
+
+---
 ---
 
+
 #### Disclaimer
+
 ###### These tools are intended for authorized (where applicable) and ethical (always) use only.
 ###### You are responsible for ensuring your use complies with all applicable laws, regulations, etc.
-###### Code is just words.
-###### Running executable code that makes requests over the internet is not just words.
-###### Please assume all requests made are traceable back to you, unless you have taken stringent OPSEC measures (doubtful)
+###### Code is just words. Running executable code that makes requests over the internet is not just words.
+###### It would be wise to take caution if visiting the .onion links that these tools unveil.
 ###### Please note that the author (I) does (do) **not** assume liability for any misuse.
-> Copyright (C) 2026 N1ckW1ck (See AGPL License)
+
+---
+
+Copyright (C) 2026 N1ckW1ck (See [AGPL License](LICENSE))
+
+
+---
+## Description
+---
+
+A collection of tools for threat intelligence research on Tor hidden services (the dark web).
+
+Scrape the dark web for one or more queries across 5 search indexes; create a local database of the uncovered .onion links with metadata and time-series tracking. View the data via a locally served web UI.
+
+The core tools are `d_erebus.py`, `d_hemera.py`, `d_mnemosyne.py`, and those within the `/Khaeos` folder. 
+
+`d_erebus.py` queries multiple search indexes over Tor for a given search term, producing a .json output of discovered URLs -> 
+
+`d_hemera.py` parses this output, extracting and deduplicating the .onion URLs into a clean list ->
+
+`d_mnemosyne.py` reads this list and conducts pre-visit safety scans on the URLs, compiling a .json with various security-related metadata on the URLs ->
+
+`Khaeos/d_khaeos.py` consumes this .json, creating `khaeos.db`: a local, persistent sqlite intelligence index, and serving a local HTML web app for a searchable and filterable graphical interface for the data.
+
+There are two primary intended usage scenarios after cloning the repo:
+
+1) Local machine usage:
+    * Clone the repo, use `d_erebus.py`, `d_hemera.py`, and `d_mnemosyne.py` as one-off scripts ran from your local machine
+2) VPS usage:
+    * Clone the repo, follow the guidance below and the [Setup Guide](https://datahackshaw.com/khaeos/#setup) to automate the tooling with the help of the files in `/Pipeline`, allowing continuous discovery of Tor hidden services. Pull `d_mnemosyne.py` batches back to local machine to grow the intelligence index. **This is the recommended long-term usage scenario**
+
+Existing as a sort of third usage option, `d_erebus.py`, `d_mnemosyne.py`, and `pgp_verify.py` are intended to be useful as standalone scripts, for Tor hidden service url discovery, Tor hidden service security analysis, and pgp signature verification respectively. These can be used independently of the above described pipeline, and simply ran on your local machine.
+
+It's a little complicated. More details below, commented into each file, and at [datahackshaw.com/khaeos/](https://datahackshaw.com/khaeos/).
+
+
 ---
 ## Repository Structure
 ---
@@ -33,30 +72,33 @@ DARK_OSINT/
 ├── d_mnemosyne.py                   — pre-visit .onion safety scanner, standalone or pipeline
 ├── pgp_verify.py                    — verify PGP signatures/canaries, fully standalone
 │
-├── Khaeos/                          # the persistent index + web UI, runs on your own machine
+├── Khaeos/                           # the persistent index + web UI, runs on your own machine
 │   ├── d_khaeos.py                  — ingest Mnemosyne output, serve the searchable index UI
+│   ├── khaeos_journal.json          — journal storage, created at runtime by d_khaeos.py
 │   ├── khaeos_ui.html               — the web UI itself, served by d_khaeos.py
-│   └── khaeos-mass-batch-ingest.sh  — example bulk-ingest helper; edit the paths/date
-│                                     range in it before using, not a polished CLI tool
+│   ├── khaeos-mass-batch-ingest.sh  — bulk-ingest helper; read/edit paths/date range before using
+│   └── khaeos.db                    — sqlite database, created at runtime by d_khaeos.py
+│                                     
 │
-├── Pipeline/                        # chain Erebus → Hemera → Mnemosyne (→ Khaeos) automatically
-│   ├── VPS_Files/                   # meant to be deployed to and run unattended on a VPS
+├── Pipeline/                         # chain Erebus → Hemera → Mnemosyne (→ Khaeos) automatically
+│   ├── VPS_Files/                    # meant to be deployed to and run unattended on a VPS
 │   │   ├── pipeline.py              — chain all three tools for one or more queries
 │   │   ├── run-pipeline.sh          — cron-friendly wrapper (day-specific queries, outbox move)
 │   │   ├── validate_batch.py        — validate a Mnemosyne batch before it reaches the outbox
 │   │   ├── validate-batch-helper.sh — one-off manual re-validate helper, edit before use, not polished
 │   │   ├── vps-setup.sh             — harden a fresh Debian VPS, create the SFTP/working users and directories
-│   │   ├── config/
+│   │   ├── strip_bad_batches.py     — remove a report by index number from a quarantined batch
+│   │   ├── config/                   # must be manually created on VPS
 │   │   │   ├── queries.txt          — fallback query list
 │   │   │   └── queries_<day>.txt    — optional day-specific override, e.g. queries_monday.txt
-│   │   └── output/                  # created at runtime, not committed
+│   │   └── output/                   # created at runtime
 │   │       ├── discovery_queue.txt  — created with --aggressive flag: links found, queued for the *next* run
-│   │       ├── erebus/              # Erebus outputs: Erebus_<query>_<timestamp>.json
-│   │       ├── hemera/              # Hemera outputs: erebus_urls_<query>_<timestamp>.txt
-│   │       └── mnemosyne/           # Mnemosyne outputs: Mnemosyne_batch_<timestamp>.json
-│   │           └── quarantine/      # batches that failed validate_batch.py
-│   └── Local_Machine_Files/         # run on your own machine, talk to the VPS over SSH/SFTP
-│       ├── push_queries.py          — manage the VPS's query files over SSH, no manual login needed
+│   │       ├── erebus/               # Erebus outputs: Erebus_<query>_<timestamp>.json
+│   │       ├── hemera/               # Hemera outputs: erebus_urls_<query>_<timestamp>.txt
+│   │       └── mnemosyne/            # Mnemosyne outputs: Mnemosyne_batch_<timestamp>.json
+│   │           └── quarantine/       # batches that failed validate_batch.py
+│   └── Local_Machine_Files/          # run on your own machine, talk to the VPS over SSH/SFTP
+│       ├── push_queries.py          — manage the VPS's query files over SSH
 │       ├── pull_batches.py          — pull validated batches from the VPS outbox over SFTP, verify + ingest
 │       └── pull-khaeos-batches.sh   — thin cron/alias wrapper around pull_batches.py
 │
@@ -64,20 +106,12 @@ DARK_OSINT/
 └── README.md
 ```
 
-Erebus, Hemera, and Mnemosyne are each individually standalone — running
-them directly writes their output into whatever directory you run them
-from. The `output/erebus/` `output/hemera/` `output/mnemosyne/`
-separation only happens when they're driven through `pipeline.py`, which
-sets each stage's working directory explicitly so nothing ends up loose
-next to the scripts.
+> **_NOTE #1:_**
+> Running Erebus, Hemera, and Mnemosyne directly as one-off scripts from a local machine writes their output into whatever directory you run them from. The `output/erebus/` `output/hemera/` `output/mnemosyne/` separation only happens when they're driven through `pipeline.py`, which sets each stage's working directory explicitly so nothing ends up loose next to the scripts on a VPS.
 
-**Automation lives in `Pipeline/VPS_Files/` specifically**: Erebus
-and Mnemosyne make sustained, repeated Tor requests, which is exactly the 
-kind of long-running, unattended workload you don't want tying up your own 
-machine or repeatedly exposing your home connection to Tor entry guards over 
-time. Running the pipeline manually once in a while from your own machine is 
-fine; running it on a schedule is what a cheap VPS is for. `pipeline.py` 
-and `run-pipeline.sh` are written with that deployment in mind.
+> **_NOTE #2:_**
+> **Automation lives in `Pipeline/VPS_Files/` specifically**: Erebus and Mnemosyne make sustained, repeated Tor requests, which is exactly the kind of long-running, unattended workload you don't want tying up your own machine or repeatedly exposing your home connection to Tor entry guards over time. Running the pipeline manually once in a while from your own machine is fine; running it many times or on a schedule is what a cheap VPS is for. `pipeline.py` and `run-pipeline.sh` are written with that deployment in mind.
+
 
 ---
 ## Setup
@@ -86,62 +120,58 @@ and `run-pipeline.sh` are written with that deployment in mind.
 - Have a recent version of Python installed on your system
 - Have Tor binary installed on your system
 - Have GnuPG (gpg) installed on your system (for pgp signature validation, not strictly necessary but recommended)
-- For Erebus/Mnemosyne: Run in a VM (use Whonix for best security) or VPS, connect to a VPN before searching/scanning
+- For Erebus/Mnemosyne: Preferably run in a VM (use Whonix for best security) or VPS, connect to a VPN before searching/scanning
 ---
 
-#### Pipeline (if desired)
+### Step 1: Clone this repository
+
+#### Local machine use (usage scenario 1)
 
 ##### Erebus → Hemera → Mnemosyne → Khaeos
 ##### Example flow:
-###### Manual, step by step:
+###### Manual, step by step, from repo root:
 
 ```bash
 python d_erebus.py --pages 5 --save-j
 python d_hemera.py Erebus_<query>_<timestamp>.json
 python d_mnemosyne.py --batch erebus_urls_<query>_<timestamp>.txt --save
-python Khaeos/d_khaeos.py --ingest Mnemosyne_batch_.json --serve
+python Khaeos/d_khaeos.py --ingest Mnemosyne_batch_<date>_<timestamp>.json --serve
 ```
+
 1. Erebus scrapes the dark net. It can certainly be used as a stand-alone tool.
 2. Hemera ingests the JSON output of Erebus, and outputs a clean .txt list of the URLs found.
 3. Mnemosyne conducts a pre-visit security analysis of .onion addresses it is fed. It is a standalone tool.
 4. Mnemosyne can also be ran in batch mode with the .txt output of Hemera, producing a group summary.
 5. Khaeos ingests single-scan and batch Mnemosyne JSON files, building a custom intelligence index.
 
+#### Local machine use (usage scenario 1)
+##### To use Pipeline to automate the above locally, which is not really recommended beyond testing (see Repository Structure Note #2)
+
 ###### Automated, one command per query (`Pipeline/VPS_Files/pipeline.py`):
 
 ```bash
 cd Pipeline/VPS_Files
-python pipeline.py "ransomware"
-python pipeline.py "forums" "leaked credentials" --pages 5
-python pipeline.py "malware" --aggressive     # optionally queue discovered links for a future run
-python pipeline.py "markets" --no-khaeos --dry-run
+python pipeline.py "ransomware" --khaeos-db /path/to/khaeos.db # one query
+# two queries, pull 5 pages of results from each search index
+python pipeline.py "forums" "leaked credentials" --pages 5 --khaeos-db /path/to/khaeos.db
+python pipeline.py "markets" --no-khaeos --dry-run # test
 ```
 
-Chain all three tools automatically, writing each stage's output into its
-own subfolder under `output/` (see [Repository Structure](#repository-structure))
-instead of leaving files loose. `--aggressive` makes Mnemosyne pull outbound
-`.onion` links off every page it scans and append newly-discovered ones to
-`output/discovery_queue.txt`. Nothing extra is scanned in that same run,
-it's just queued for later, so a single link-heavy page can't blow up how
-long a run takes. `pipeline.py` finds `d_erebus.py`/`d_hemera.py`/`d_mnemosyne.py`
-at the repo root and `d_khaeos.py` under `Khaeos/` automatically, it
-doesn't need to be run from a flattened directory, this works straight
-out of a clone.
+Chain all three tools automatically, writing each stage's output into its own subfolder under `output/` (see [Repository Structure](#repository-structure)) instead of leaving files loose. `pipeline.py` finds `d_erebus.py`/`d_hemera.py`/`d_mnemosyne.py` at the repo root automatically, it doesn't need to be run from a flattened directory, this works straight out of a clone.
 
-###### Unattended on a VPS (`run-pipeline.sh` + cron):
+---
 
-`run-pipeline.sh` is the cron-friendly wrapper: it picks a day-specific
-query file if one exists (`config/queries_monday.txt`, falling back to
-`config/queries.txt`), runs `pipeline.py`, consumes whatever's sitting in
-the discovery queue from the *previous* run first, then validates and
-moves every batch the run actually produced into the SFTP outbox via
-`validate_batch.py`. A single query failing (a flaky Tor circuit, an
-index timing out) doesn't stop the rest, everything that did succeed
-still gets validated and moved.
+#### Unattended on a VPS (usage scenario 2)
 
-See the [Setup Guide](https://datahackshaw.com/khaeos/#setup) for instructions
-to set the program up to run as an automated service on a VPS.
+##### To use Pipeline to automate the tooling on a VPS:
 
+**See the [Setup Guide](https://datahackshaw.com/khaeos/#setup) for instructions
+to set the program up to run as an automated service on a VPS.**
+
+---
+---
+# Individual tool descriptions below this point
+---
 ---
 
 ![Erebus](assets/erebusbanner.png)
