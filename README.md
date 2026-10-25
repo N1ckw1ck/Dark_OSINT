@@ -13,6 +13,7 @@
 - [Mnemosyne](#mnemosyne-onion-link-recon)
 - [Khaeos](#khaeos-control-center)
 - [Other Tools](#other-possibly-helpful-tools)
+- [Roadmap / Intended Changes](#roadmap--intended-changes)
 
 ---
 ---
@@ -167,6 +168,8 @@ Chain all three tools automatically, writing each stage's output into its own su
 
 **See the [Setup Guide](https://datahackshaw.com/khaeos/#setup) for instructions
 to set the program up to run as an automated service on a VPS.**
+
+**The [Flowchart Diagram](assets/flowchart-diagram.png) also exists as a visual diagram of how the program works in this usage scenario for general reference.**
 
 ---
 ---
@@ -507,5 +510,15 @@ alias khaeos='python /path/to/d_khaeos.py --db /Path/To/Drive/khaeos_folder/khae
 
 1. `pgp_verify.py`
 - Authenticate PGP signatures (read comments in file) (or just try it out it's relatively self-explanatory)
+
+---
+
+## Roadmap / Intended Changes
+
+- [ ] Favicon hash per site to surface sites that share a favicon
+- [ ] PGP canary key reuse check to flag sites signing with the same fingerprint
+- [ ] Content hash per scan to track when a site's page actually last changed
+- [ ] Show robots.txt content on the site detail page in the UI
+- [ ] CMS/Framework/Language determination to tell what a site runs
 
 [Back to top](#dark-web-osint)

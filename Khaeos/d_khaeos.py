@@ -113,6 +113,7 @@ CATEGORY_KEYWORDS: dict[str, list[str]] = {
     'services': ['service', 'api', 'tool', 'util', 'convert', 'generate', 'verify', 'captcha', 'url shortener', 'paste', 'upload', 'file'],
     'counterfeit': ['counterfeit', 'fake id', 'passport', 'document', 'fake', 'clone', 'replica', 'forgery'],
     'mirror': ['mirror', 'clone', 'backup', 'alternative', 'alt link', 'alternative link'],
+    'unreachable': [],
     'uncategorized': [],
 }
 
@@ -276,7 +277,7 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
     scan_time: str = str(report.get('scan_time', datetime.now(timezone.utc).isoformat()))
     ingested_at: str = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
- # Check for duplicate scan (same host + scan_time)
+    # Check for duplicate scan (same host + scan_time)
     existing = conn.execute(
         'SELECT id FROM scans WHERE host = ? AND scan_time = ?',
         (host, scan_time)
@@ -284,7 +285,7 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
     if existing:
         return False, f'Duplicate scan for {host} at {scan_time} — skipped'
 
- # Extract fields from report
+    # Extract fields from report
     reach: dict[str, Any] = report.get('reachability') or {}
     reputation: dict[str, Any] | None = report.get('reputation')
     headers_data: dict[str, Any] | None = report.get('headers')
@@ -351,11 +352,14 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
     page_title = str(report.get('page_title') or '')
     raw_html_length = int(report.get('raw_html_length') or 0)
 
- # Upsert site row 
+    # Upsert site row 
     site_row = conn.execute('SELECT * FROM sites WHERE host = ?', (host,)).fetchone()
 
     if site_row is None:
-        category = infer_category(page_title)
+        if reachable:
+            category = infer_category(page_title)
+        else:
+            category = 'unreachable'
         conn.execute('''
             INSERT INTO sites (
                 host, first_seen, last_seen, last_scan_time, page_title, category,
@@ -383,7 +387,7 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
         scans_reachable = int(site_row['scans_reachable']) + reachable
         uptime_pct = round((scans_reachable / total_scans) * 100, 1)
 
-     # Rolling average latency
+        # Rolling average latency
         old_avg = site_row['avg_latency_ms']
         old_total = int(site_row['total_scans'])
         if latency_ms is not None:
@@ -394,11 +398,16 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
         else:
             new_avg = old_avg
 
-     # Refresh title if we just got one and didn't have one before
+        # Refresh title if we just got one and didn't have one before
         new_title = page_title if page_title else str(site_row['page_title'] or '')
         new_category = str(site_row['category'])
-        if new_category == 'uncategorized' and new_title:
-            new_category = infer_category(new_title)
+        if reachable:
+            # Only assign a real category if it doesn't already have one
+            if new_category in ('uncategorized', 'unreachable') and new_title:
+                new_category = infer_category(new_title)
+        elif new_category == 'uncategorized':
+            # Never categorized, and unreachable this scan too
+            new_category = 'unreachable'
 
         conn.execute('''
             UPDATE sites SET
@@ -432,7 +441,7 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
             site_id,
         ))
 
- # Insert scan row
+    # Insert scan row
     conn.execute('''
         INSERT INTO scans (
             site_id, host, scan_time, ingested_at,
