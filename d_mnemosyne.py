@@ -25,20 +25,21 @@ Usage:
   python d_mnemosyne.py [--save] [--debug]
   python d_mnemosyne.py --batch <url_list.txt>
 
-    --batch <file>  Batch mode:
-        Read .onion URLs from a text file (one per line).
-        Runs a sequential scan of all targets over a single Tor session.
-        More URLs means it will take longer.
-        Output is a grouped summary report. JSON (--save) produces a
-        single consolidated file instead of per-target files.
-        Generate the input file with: python d_erebus.py --save-j
+    --batch <file>           Batch mode:
+                             Read .onion URLs from a text file (one per line).
+                             Runs a sequential scan of all targets over a single Tor session.
+                             More URLs means it will take longer.
+                             Output is a grouped summary report. JSON (--save) produces a
+                             single consolidated file instead of per-target files.
+                             Generate the input file with: python d_erebus.py --save-j
 
-    --aggressive           Extract outbound .onion links found on each scanned
-                           page and append newly-discovered ones (deduplicated)
-                           to a discovery queue file. Nothing is scanned this
-                           run — the queue is plain text, one URL per line,
-                           and can be fed straight back in as a --batch file
-                           on a future run.
+    --aggressive             Extract outbound .onion links found on each scanned
+                             page and append newly-discovered ones (deduplicated)
+                             to a discovery queue file. Nothing is scanned this
+                             run — the queue is plain text, one URL per line,
+                             and can be fed straight back in as a --batch file
+                             on a future run.
+
     --discovery-out <file>   Discovery queue path (default: discovery_queue.txt
                              in the current directory). Only relevant with
                              --aggressive.
@@ -308,6 +309,8 @@ class OnionReport:
     risk: RiskScore | None
     page_title: str
     raw_html_length: int
+    favicon_hash: str
+    content_hash: str
 
 
 # Helpers
@@ -1232,7 +1235,7 @@ def run_scan(
     base_url = target_url.rstrip('/')
     scan_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    print(f'\n{DIM}[1/9] Checking reachability...{RESET}')
+    print(f'\n{DIM}[1/10] Checking reachability...{RESET}')
     reachability = check_reachability(session, base_url)
 
     # Here so Ahmia blocklist check will work even if target is unreachable
@@ -1257,9 +1260,11 @@ def run_scan(
             risk=RiskScore(score=0, level='UNKNOWN', flags=['Service unreachable']),
             page_title='',
             raw_html_length=0,
+            favicon_hash='',
+            content_hash='',
         )
     
-    print(f'{DIM}[2/9] Checking reputation blacklists...{RESET}')
+    print(f'{DIM}[2/10] Checking reputation blacklists...{RESET}')
 
     # Fetch root page once, reuse soup for all HTML analysis
     headers_result: HeaderAnalysis | None = None
@@ -1267,13 +1272,15 @@ def run_scan(
     html = ''
     page_title = ''
     raw_html_length = 0
+    content_hash = ''
 
-    print(f'{DIM}[3/9] Fetching root page and analyzing headers...{RESET}')
+    print(f'{DIM}[3/10] Fetching root page and analyzing headers...{RESET}')
     try:
         response = tor_get(session, reachability.final_url, allow_redirects=True)
         headers_result = analyze_headers(response)
         html = response.text
         raw_html_length = len(response.content)
+        content_hash = hashlib.sha256(response.content).hexdigest()
         soup = BeautifulSoup(html, 'html.parser')
         title_tag = soup.find('title')
         page_title = title_tag.get_text(strip=True)[:200] if title_tag else ''
@@ -1281,10 +1288,20 @@ def run_scan(
         if debug:
             print(f'  {R}Root page fetch error: {e}{RESET}')
 
-    print(f'{DIM}[4/9] Probing well-known files...{RESET}')
+    print(f'{DIM}[4/10] Probing well-known files...{RESET}')
     well_known = probe_well_known(session, base_url)
 
-    print(f'{DIM}[5/9] Verifying PGP canary...{RESET}')
+    favicon_hash = ''
+    print(f'{DIM}[5/10] Fetching favicon...{RESET}')
+    try:
+        favicon_response = tor_get(session, base_url + '/favicon.ico', allow_redirects=True)
+        if favicon_response.status_code == 200 and favicon_response.content:
+            favicon_hash = hashlib.sha256(favicon_response.content).hexdigest()
+    except Exception as e:
+        if debug:
+            print(f'  {R}Favicon fetch error: {e}{RESET}')
+
+    print(f'{DIM}[6/10] Verifying PGP canary...{RESET}')
     canary = verify_canary(well_known, debug=debug)
 
     scripts: ScriptAnalysis | None = None
@@ -1293,16 +1310,16 @@ def run_scan(
     tech: TechFingerprint | None = None
 
     if soup is not None:
-        print(f'{DIM}[6/9] Analyzing scripts and fingerprinting vectors...{RESET}')
+        print(f'{DIM}[7/10] Analyzing scripts and fingerprinting vectors...{RESET}')
         scripts = analyze_scripts(soup, html)
 
-        print(f'{DIM}[7/9] Analyzing external resource references...{RESET}')
+        print(f'{DIM}[8/10] Analyzing external resource references...{RESET}')
         resources = analyze_resources(soup)
 
-        print(f'{DIM}[8/9] Analyzing forms...{RESET}')
+        print(f'{DIM}[9/10] Analyzing forms...{RESET}')
         forms = analyze_forms(soup)
 
-        print(f'{DIM}[9/9] Fingerprinting technology stack...{RESET}')
+        print(f'{DIM}[10/10] Fingerprinting technology stack...{RESET}')
         tech = fingerprint_tech(soup, headers_result)
 
         if aggressive and discovered is not None:
@@ -1328,6 +1345,8 @@ def run_scan(
         risk=risk,
         page_title=page_title,
         raw_html_length=raw_html_length,
+        favicon_hash=favicon_hash,
+        content_hash=content_hash,
     )
 
 
@@ -1706,6 +1725,8 @@ def _serialize_report(report: OnionReport) -> dict[str, Any]:
         'risk': asdict(report.risk) if report.risk else None,
         'page_title': report.page_title,
         'raw_html_length': report.raw_html_length,
+        'favicon_hash': report.favicon_hash,
+        'content_hash': report.content_hash,
     }
 
 # Save

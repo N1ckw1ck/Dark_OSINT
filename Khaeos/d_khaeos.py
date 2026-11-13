@@ -142,7 +142,11 @@ CREATE TABLE IF NOT EXISTS sites (
     canary_valid INTEGER DEFAULT 0,
     security_headers_count INTEGER DEFAULT 0,
     web_server TEXT DEFAULT '',
-    raw_html_length INTEGER DEFAULT 0
+    raw_html_length INTEGER DEFAULT 0,
+    favicon_hash TEXT DEFAULT '',
+    canary_fingerprint TEXT DEFAULT '',
+    content_hash TEXT DEFAULT '',
+    content_last_changed TEXT
 );
 
 CREATE TABLE IF NOT EXISTS scans (
@@ -218,9 +222,26 @@ def get_db(db_path: Path) -> Generator[sqlite3.Connection, None, None]:
         conn.close()
 
 
+# Added columns for existing databases --- V1.4.6
+# will add whatever is missing such that CREATE TABLE IF NOT EXISTS doesn't mean these new columns are never picked up for existing dbs
+SITES_MIGRATIONS: dict[str, str] = {
+    'favicon_hash': "TEXT DEFAULT ''",
+    'canary_fingerprint': "TEXT DEFAULT ''",
+    'content_hash': "TEXT DEFAULT ''",
+    'content_last_changed': 'TEXT',
+}
+
+def migrate_schema(conn: sqlite3.Connection) -> None:
+    existing = {row['name'] for row in conn.execute('PRAGMA table_info(sites)')}
+    for column, col_def in SITES_MIGRATIONS.items():
+        if column not in existing:
+            conn.execute(f'ALTER TABLE sites ADD COLUMN {column} {col_def}')
+
+
 def init_db(db_path: Path) -> None:
     with get_db(db_path) as conn:
         conn.executescript(SCHEMA)
+        migrate_schema(conn)
 
 
 # Category inference
@@ -351,6 +372,8 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
 
     page_title = str(report.get('page_title') or '')
     raw_html_length = int(report.get('raw_html_length') or 0)
+    favicon_hash = str(report.get('favicon_hash') or '')
+    content_hash = str(report.get('content_hash') or '')
 
     # Upsert site row 
     site_row = conn.execute('SELECT * FROM sites WHERE host = ?', (host,)).fetchone()
@@ -367,8 +390,9 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
                 avg_latency_ms, last_risk_level, last_risk_score,
                 blacklisted, clearnet_leak, clearnet_redirect,
                 has_canary, canary_valid, security_headers_count,
-                web_server, raw_html_length
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                web_server, raw_html_length, favicon_hash,
+                canary_fingerprint, content_hash, content_last_changed
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ''', (
             host, scan_time, scan_time, scan_time, page_title, category,
             1,
@@ -379,6 +403,8 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
             blacklisted, min(1, clearnet_leaks), clr_redirect,
             has_canary, canary_valid, len(sec_present),
             web_server, raw_html_length,
+            favicon_hash, canary_fp, content_hash,
+            scan_time if content_hash else None,
         ))
         site_id = conn.execute('SELECT id FROM sites WHERE host = ?', (host,)).fetchone()['id']
     else:
@@ -398,7 +424,7 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
         else:
             new_avg = old_avg
 
-        # Refresh title if we just got one and didn't have one before
+        # Refresh title if just got and didn't have before
         new_title = page_title if page_title else str(site_row['page_title'] or '')
         new_category = str(site_row['category'])
         if reachable:
@@ -408,6 +434,19 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
         elif new_category == 'uncategorized':
             # Never categorized, and unreachable this scan too
             new_category = 'unreachable'
+
+        # Latest-known-value fields - keep what exists if this scan didn't surface fresh one
+        new_favicon_hash = favicon_hash if favicon_hash else str(site_row['favicon_hash'] or '')
+        new_canary_fp = canary_fp if canary_fp else str(site_row['canary_fingerprint'] or '')
+
+        # content_last_changed only moves when the hash actually differs — unreachable scan (content_hash == '') leaves both untouched
+        old_content_hash = str(site_row['content_hash'] or '')
+        if content_hash and content_hash != old_content_hash:
+            new_content_hash = content_hash
+            new_content_last_changed = scan_time
+        else:
+            new_content_hash = old_content_hash
+            new_content_last_changed = site_row['content_last_changed']
 
         conn.execute('''
             UPDATE sites SET
@@ -428,7 +467,11 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
                 canary_valid = ?,
                 security_headers_count = ?,
                 web_server = ?,
-                raw_html_length = ?
+                raw_html_length = ?,
+                favicon_hash = ?,
+                canary_fingerprint = ?,
+                content_hash = ?,
+                content_last_changed = ?
             WHERE id = ?
         ''', (
             scan_time, scan_time, new_title, new_category,
@@ -438,6 +481,7 @@ def ingest_report(conn: sqlite3.Connection, report: dict[str, Any], batch_id: st
             has_canary, canary_valid, len(sec_present),
             web_server if web_server else str(site_row['web_server'] or ''),
             raw_html_length,
+            new_favicon_hash, new_canary_fp, new_content_hash, new_content_last_changed,
             site_id,
         ))
 
@@ -535,7 +579,7 @@ def ingest_file(json_path: Path, db_path: Path) -> tuple[int, int, list[str]]:
 
 # FastAPI app
 def create_app(db_path: Path) -> 'FastAPI':
-    app = FastAPI(title='Khaeos', version='1.4.4', docs_url=None, redoc_url=None) # type: ignore
+    app = FastAPI(title='Khaeos', version='1.4.6', docs_url=None, redoc_url=None) # type: ignore
     app.add_middleware(
         CORSMiddleware, # type: ignore
         allow_origins=['*'],
@@ -662,9 +706,29 @@ def create_app(db_path: Path) -> 'FastAPI':
                 'SELECT * FROM scans WHERE host = ? ORDER BY scan_time ASC',
                 (host,)
             ).fetchall()
+
+            # Cross-site correlation — must be real non empty value for matching
+            favicon_matches: list[str] = []
+            if site['favicon_hash']:
+                rows = conn.execute(
+                    'SELECT host FROM sites WHERE favicon_hash = ? AND host != ?',
+                    (site['favicon_hash'], host)
+                ).fetchall()
+                favicon_matches = [r['host'] for r in rows]
+
+            canary_matches: list[str] = []
+            if site['canary_fingerprint']:
+                rows = conn.execute(
+                    'SELECT host FROM sites WHERE canary_fingerprint = ? AND host != ?',
+                    (site['canary_fingerprint'], host)
+                ).fetchall()
+                canary_matches = [r['host'] for r in rows]
+
         return JSONResponse({ # type: ignore
             'site': dict(site),
             'scans': [dict(s) for s in scans],
+            'favicon_matches': favicon_matches,
+            'canary_matches': canary_matches,
         })
 
     # Time-series data for charts

@@ -879,7 +879,7 @@
     <div>
       <div id="header-brand">✵ KHAEOS</div>
 
-      <div id="header-sub">Χαεος · bl̻̘͈̪ͪ̓į̴̮̱n̳̞d̞̙̱̰̅͂ k̡͡haeo͋̉͟͞ś̘̙ͥ̕͢ ͕͍̩̠͐͑iş̷ ͯ͐bṵ̢̠ͨͦ͡rsṯ̨̖͠ ope̶͉͍͝n · v1.4.4</div>
+      <div id="header-sub">Χαεος · bl̻̘͈̪ͪ̓į̴̮̱n̳̞d̞̙̱̰̅͂ k̡͡haeo͋̉͟͞ś̘̙ͥ̕͢ ͕͍̩̠͐͑iş̷ ͯ͐bṵ̢̠ͨͦ͡rsṯ̨̖͠ ope̶͉͍͝n · v1.4.6</div>
 
     </div>
 
@@ -1660,6 +1660,8 @@ async function openDetail(host) {
     const d = await apiFetch('/api/sites/' + encodeURIComponent(host));
     const site = d.site;
     const scans = d.scans;
+    site.favicon_matches = d.favicon_matches || [];
+    site.canary_matches = d.canary_matches || [];
 
     document.getElementById('detail-title').textContent = site.page_title || '';
     document.getElementById('detail-tags-input').value = site.tags || '';
@@ -1733,6 +1735,18 @@ function renderPosture(site, scans) {
 
   if (secPresent.length) rows.push({ label: '  Present', good: true, val: secPresent.join(', ') });
   if (secMissing.length) rows.push({ label: '  Missing', good: false, val: secMissing.join(', ') });
+
+  // Cross-site correlation — informational, not a risk signal either way
+  if (site.favicon_hash) {
+    const matches = site.favicon_matches || [];
+    rows.push({ label: 'Favicon Match', good: true, val: matches.length ? `${matches.length} other site(s) share this favicon` : 'Unique so far' });
+    if (matches.length) rows.push({ label: '  Shared with', good: true, val: matches.join(', ') });
+  }
+  if (site.canary_fingerprint) {
+    const matches = site.canary_matches || [];
+    rows.push({ label: 'Canary Key Reuse', good: true, val: matches.length ? `${matches.length} other site(s) signed by this key` : 'Unique so far' });
+    if (matches.length) rows.push({ label: '  Signed with same key', good: true, val: matches.join(', ') });
+  }
 
   const container = document.getElementById('posture-rows');
   container.innerHTML = '';

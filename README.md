@@ -515,10 +515,10 @@ alias khaeos='python /path/to/d_khaeos.py --db /Path/To/Drive/khaeos_folder/khae
 
 ## Roadmap / Intended Changes
 
-- [ ] Favicon hash per site to surface sites that share a favicon
-- [ ] PGP canary key reuse check to flag sites signing with the same fingerprint
-- [ ] Content hash per scan to track when a site's page actually last changed
+- [x] Favicon hash per site to surface sites that share a favicon
+- [x] PGP canary key reuse check to flag sites signing with the same fingerprint
+- [x] Content hash per scan to track when a site's page actually last changed
 - [ ] Show robots.txt content on the site detail page in the UI
 - [ ] CMS/Framework/Language determination to tell what a site runs
 
-[Back to top](#dark-web-osint)
+[Back to top](#dark-web-osint-suite)

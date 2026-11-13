@@ -57,14 +57,14 @@ BATCH_TOP_LEVEL = {
 SINGLE_TOP_LEVEL = {
     'scan_time', 'target', 'tor', 'reachability', 'reputation', 'headers',
     'well_known', 'canary', 'scripts', 'resources', 'forms', 'tech', 'risk',
-    'page_title', 'raw_html_length',
+    'page_title', 'raw_html_length', 'favicon_hash', 'content_hash',
 }
 
 # Expected keys inside each report dict
 REPORT_KEYS = {
     'scan_time', 'target', 'tor', 'reachability', 'reputation', 'headers',
     'well_known', 'canary', 'scripts', 'resources', 'forms', 'tech', 'risk',
-    'page_title', 'raw_html_length',
+    'page_title', 'raw_html_length', 'favicon_hash', 'content_hash',
 }
 
 # Fields that must be strings if present
